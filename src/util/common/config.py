@@ -348,6 +348,7 @@ class APPConfig(QConfig):
     cover_type = OptionsConfigItem("Additional", "cover_type", CoverType.JPG, OptionsValidator(CoverType), EnumSerializer(CoverType))
     attach_cover = ConfigItem("Additional", "attach_cover", False, BoolValidator())
     attach_cover_audio = ConfigItem("Additional", "attach_cover_audio", False, BoolValidator())
+    auto_tag = ConfigItem("Additional", "auto_tag", False, BoolValidator())
 
     download_metadata = ConfigItem("Additional", "download_metadata", False, BoolValidator())
     metadata_type = OptionsConfigItem("Additional", "metadata_type", MetadataType.NFO, OptionsValidator(MetadataType), EnumSerializer(MetadataType))

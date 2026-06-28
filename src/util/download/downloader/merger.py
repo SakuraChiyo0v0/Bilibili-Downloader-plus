@@ -64,7 +64,8 @@ class Merger(QObject):
                 video_path = self.temp_video_file_name,
                 audio_path = self.temp_audio_file_name,
                 output_path = self.temp_output_file_name,
-                cover_path = self.check_attach_cover()
+                cover_path = self.check_attach_cover(),
+                metadata = self.get_metadata_tags()
             )
 
             self._run_merge_command(merge_cmd, cwd)
@@ -88,7 +89,8 @@ class Merger(QObject):
         merge_cmd = FFmpegCommand.merge_video_parts(
             lists_path = lists_path,
             output_path = self.temp_output_file_name,
-            cover_path = self.check_attach_cover()
+            cover_path = self.check_attach_cover(),
+            metadata = self.get_metadata_tags()
         )
 
         self._run_merge_command(merge_cmd, cwd)
@@ -283,7 +285,8 @@ class Merger(QObject):
             convert_cmd = FFmpegCommand.convert_m4a_to_mp3(
                 input_path = self._temp_m4a_audio_name,
                 output_path = self.temp_audio_file_name,
-                cover_path = cover_path
+                cover_path = cover_path,
+                metadata = self.get_metadata_tags()
             )
 
             self._ffmpeg_runner = FFmpegRunner.from_command(convert_cmd, parent=self)
@@ -296,6 +299,24 @@ class Merger(QObject):
                 Translator.ERROR_MESSAGES("DOWNLOAD_FAILED"),
                 Translator.ERROR_MESSAGES("M4A_NOT_FOUND")
             )
+
+    def get_metadata_tags(self):
+        """从 Episode 信息提取元数据标签，用于音频/视频文件的 metadata 写入"""
+        if not config.get(config.auto_tag):
+            return None
+
+        episode = self.task_info.Episode
+        tags = {}
+
+        # title
+        if episode.leaf_title:
+            tags["title"] = episode.leaf_title
+
+        # artist (视频 UP 主)
+        if episode.uploader:
+            tags["artist"] = episode.uploader
+
+        return tags if tags else None
 
     def check_attach_cover(self, config_key = None):
         if config_key is None:
@@ -324,7 +345,8 @@ class Merger(QObject):
         cmd = FFmpegCommand.attach_cover_to_m4a(
             input_path = self._cover_embed_source,
             output_path = self._cover_embed_temp_output,
-            cover_path = cover_path
+            cover_path = cover_path,
+            metadata = self.get_metadata_tags()
         )
 
         self._run_cover_embed(cmd, cwd)

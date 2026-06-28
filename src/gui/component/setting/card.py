@@ -284,6 +284,7 @@ class CoverSettingCard(ExpandGroupSettingCard):
 
         self.attach_cover_switch = SettingSwitchButton(config.attach_cover, parent = self)
         self.attach_cover_audio_switch = SettingSwitchButton(config.attach_cover_audio, parent = self)
+        self.auto_tag_switch = SettingSwitchButton(config.auto_tag, parent = self)
 
         self.viewLayout.setContentsMargins(0, 0, 0, 0)
         self.viewLayout.setSpacing(0)
@@ -292,6 +293,7 @@ class CoverSettingCard(ExpandGroupSettingCard):
         self.addGroup("", self.tr("Cover Format"), "", self.type_choice)
         self.attach_cover_group = self.addGroup("", self.tr("嵌入封面（视频+音频）"), self.tr("合并视频和音频时嵌入封面"), self.attach_cover_switch)
         self.attach_cover_audio_group = self.addGroup("", self.tr("嵌入封面（纯音频）"), self.tr("纯音频文件嵌入封面"), self.attach_cover_audio_switch)
+        self.addGroup("", self.tr("自动写入标签"), self.tr("将标题、UP主、合集等元数据写入文件"), self.auto_tag_switch)
 
         has_cover = config.get(config.download_cover) and not self.type_choice.currentText() == "avif"
         self.attach_cover_group.setEnabled(has_cover)
