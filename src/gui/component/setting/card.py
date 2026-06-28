@@ -283,15 +283,19 @@ class CoverSettingCard(ExpandGroupSettingCard):
         self.type_choice.setFixedWidth(120)
 
         self.attach_cover_switch = SettingSwitchButton(config.attach_cover, parent = self)
+        self.attach_cover_audio_switch = SettingSwitchButton(config.attach_cover_audio, parent = self)
 
         self.viewLayout.setContentsMargins(0, 0, 0, 0)
         self.viewLayout.setSpacing(0)
 
         self.addGroup("", self.tr("Download Cover"), "", self.download_switch)
         self.addGroup("", self.tr("Cover Format"), "", self.type_choice)
-        self.attach_cover_group = self.addGroup("", self.tr("Embed Cover"), self.tr("Embed the downloaded cover into the video file"), self.attach_cover_switch)
+        self.attach_cover_group = self.addGroup("", self.tr("嵌入封面（视频+音频）"), self.tr("合并视频和音频时嵌入封面"), self.attach_cover_switch)
+        self.attach_cover_audio_group = self.addGroup("", self.tr("嵌入封面（纯音频）"), self.tr("纯音频文件嵌入封面"), self.attach_cover_audio_switch)
 
-        self.attach_cover_group.setEnabled(config.get(config.download_cover) and not self.type_choice.currentText() == "avif")
+        has_cover = config.get(config.download_cover) and not self.type_choice.currentText() == "avif"
+        self.attach_cover_group.setEnabled(has_cover)
+        self.attach_cover_audio_group.setEnabled(has_cover)
         self.download_switch.checkedChanged.connect(self.on_toggle_attach_cover)
         self.type_choice.currentIndexChanged.connect(self.on_change_cover_format)
 
@@ -299,16 +303,22 @@ class CoverSettingCard(ExpandGroupSettingCard):
         # avif 格式不支持作为封面嵌入，如果用户选择了 avif 作为封面格式，则禁用嵌入封面选项
         is_avif = index == 2
 
-        if is_avif and self.attach_cover_switch.isChecked():
-            self.attach_cover_switch.setChecked(False)
+        if is_avif:
+            if self.attach_cover_switch.isChecked():
+                self.attach_cover_switch.setChecked(False)
+            if self.attach_cover_audio_switch.isChecked():
+                self.attach_cover_audio_switch.setChecked(False)
 
         self.attach_cover_group.setEnabled(not is_avif)
+        self.attach_cover_audio_group.setEnabled(not is_avif)
 
     def on_toggle_attach_cover(self, checked: bool):
         self.attach_cover_group.setEnabled(checked)
+        self.attach_cover_audio_group.setEnabled(checked)
 
         if not checked:
             self.attach_cover_switch.setChecked(False)
+            self.attach_cover_audio_switch.setChecked(False)
 
 class MetadataSettingCard(ExpandGroupSettingCard):
     def __init__(self, parent = None):

@@ -42,10 +42,11 @@ class Merger(QObject):
                 # 将 m4a 转换为 mp3
                 self.m4a_to_mp3()
                 return
-            
-            # else:
-            #     # 对 m4a 文件进行修复
-            #     self.fix_mp4_box()
+
+            if self.check_attach_cover(config.attach_cover_audio):
+                # 纯音频 m4a 不转换，嵌入封面
+                self.embed_cover_to_audio()
+                return
 
             self.rename_output_file()
 
@@ -277,9 +278,12 @@ class Merger(QObject):
 
             self._output_audio_file = self.temp_audio_file_name
 
+            cover_path = self.check_attach_cover(config.attach_cover_audio)
+
             convert_cmd = FFmpegCommand.convert_m4a_to_mp3(
                 input_path = self._temp_m4a_audio_name,
-                output_path = self.temp_audio_file_name
+                output_path = self.temp_audio_file_name,
+                cover_path = cover_path
             )
 
             self._ffmpeg_runner = FFmpegRunner.from_command(convert_cmd, parent=self)
@@ -293,14 +297,64 @@ class Merger(QObject):
                 Translator.ERROR_MESSAGES("M4A_NOT_FOUND")
             )
 
-    def check_attach_cover(self):
-        if config.get(config.attach_cover):
+    def check_attach_cover(self, config_key = None):
+        if config_key is None:
+            config_key = config.attach_cover
+
+        if config.get(config_key):
             cover_path = Path(self.get_cwd(), self.cover_file_name)
             if cover_path.exists():
                 return self.cover_file_name
             else:
                 logger.warning(f"封面文件 {cover_path} 不存在，无法嵌入封面")
         return None
+
+    def embed_cover_to_audio(self):
+        cwd = self.get_cwd()
+        cover_path = self.check_attach_cover(config.attach_cover_audio)
+
+        if not cover_path:
+            self.rename_output_file()
+            return
+
+        self._cover_embed_source = self.temp_audio_file_name
+        self._cover_embed_temp_output = f"cover_output_{self.task_info.Basic.task_id}.{self.task_info.File.audio_file_ext}"
+        self._cover_embed_final = self.final_audio_file_name
+
+        cmd = FFmpegCommand.attach_cover_to_m4a(
+            input_path = self._cover_embed_source,
+            output_path = self._cover_embed_temp_output,
+            cover_path = cover_path
+        )
+
+        self._run_cover_embed(cmd, cwd)
+
+    def _run_cover_embed(self, cmd: FFmpegCommand, cwd: Path):
+        self.task_info.Download.status = DownloadStatus.CONVERTING
+        signal_bus.download.update_downloading_item.emit(self.task_info)
+
+        self._ffmpeg_runner = FFmpegRunner.from_command(cmd, parent = self)
+        self._ffmpeg_runner.set_cwd(cwd)
+        self._ffmpeg_runner.finished_signal.connect(self.on_cover_embed_completed)
+        self._ffmpeg_runner.error_signal.connect(self.on_merge_error)
+        self._ffmpeg_runner.start()
+
+    def on_cover_embed_completed(self, return_code: int, stdout: str, stderr: str):
+        if getattr(self, "_has_error", False):
+            return
+
+        try:
+            cwd = self.get_cwd()
+
+            safe_remove(cwd, self._cover_embed_source)
+
+            final_file_name = safe_rename(cwd, self._cover_embed_temp_output, self._cover_embed_final).name
+
+            self.add_file(final_file_name, clear = True)
+            self.mark_as_completed()
+
+        except Exception as e:
+            self.set_error_message(Translator.ERROR_MESSAGES("RENAME_FAILED"), str(e))
 
     def create_lists_file(self, video_parts_count: int):
         cwd = self.get_cwd()

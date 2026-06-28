@@ -92,14 +92,29 @@ class FFmpegCommand:
             )
 
     @classmethod
-    def convert_m4a_to_mp3(cls, input_path: str, output_path: str):
-        return (
-            cls()
-            .add_input(input_path)
-            .add_param("-c:a", "libmp3lame")
-            .add_param("-q:a", "2")
-            .add_output(output_path)
-        )
+    def convert_m4a_to_mp3(cls, input_path: str, output_path: str, cover_path: str = None):
+        if cover_path:
+            return (
+                cls()
+                .add_input(input_path)
+                .add_input(cover_path)
+                .add_param("-map", "0:a:0")
+                .add_param("-map", "1:v:0")
+                .add_param("-c:a", "libmp3lame")
+                .add_param("-q:a", "2")
+                .add_param("-c:v:0", "mjpeg")
+                .add_param("-disposition:v:0", "attached_pic")
+                .add_param("-id3v2_version", "3")
+                .add_output(output_path)
+            )
+        else:
+            return (
+                cls()
+                .add_input(input_path)
+                .add_param("-c:a", "libmp3lame")
+                .add_param("-q:a", "2")
+                .add_output(output_path)
+            )
     
     @classmethod
     def fix_mp4_box(cls, input_path: str, output_path: str):
@@ -108,5 +123,20 @@ class FFmpegCommand:
             .add_input(input_path)
             .add_param("-c", "copy")
             .add_param("-movflags", "+faststart")
+            .add_output(output_path)
+        )
+
+    @classmethod
+    def attach_cover_to_m4a(cls, input_path: str, output_path: str, cover_path: str):
+        return (
+            cls()
+            .add_input(input_path)
+            .add_input(cover_path)
+            .add_param("-map", "0:a:0")
+            .add_param("-map", "1:v:0")
+            .add_param("-c:a", "copy")
+            .add_param("-c:v:0", "mjpeg")
+            .add_param("-disposition:v:0", "attached_pic")
+            .add_param("-pix_fmt:v:0", "yuvj420p")
             .add_output(output_path)
         )

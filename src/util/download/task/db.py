@@ -22,9 +22,9 @@ class TaskDatabase(Database):
         self._check_should_upgrade()
 
     def _check_should_upgrade(self):
-        if config.should_upgrade_config:
-            self._upgrade()
+        self._upgrade()
 
+        if config.should_upgrade_config:
             config.should_upgrade_config = False
 
     def check_and_create_table(self):
