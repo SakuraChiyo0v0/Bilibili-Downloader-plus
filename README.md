@@ -4,7 +4,9 @@
     </a>
 </p>
 
-<h1 align="center">Bili23-Downloader</h1>
+<h1 align="center">Bili23-Downloader-plus</h1>
+
+开源、免费、跨平台的 B 站视频下载工具，支持多线程加速、音视频分离、弹幕元数据获取、自定义命名与分类等功能。在原有功能基础上增加**「纯音频封面嵌入」「自动写入MP3标签」「通过WebDAV下载至远程服务器」**三项功能
 
 <p align="center">
     <img src="https://img.shields.io/github/v/release/ScottSloan/Bili23-Downloader?style=flat-square" alt="Release"/>
