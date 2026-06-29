@@ -5,6 +5,7 @@ from .card import (
     DownloadConcurrencySettingCard, DownloadConcurrencySettingCard, PersonalizationCard,
     CheckUpdateSettingCard, OtherAdvancedSettingCard
 )
+from .storage_card import StorageSettingCard
 from .group import FontGroup, BorderGroup, ColorGroup, MarginGroup, AlignmentGroup, AdvancedGroup, ResolutionGroup
 from .widget import (
     SettingSwitchButton, SettingComboBox, EditActionWidget, ParseActionWidget, InsertActionWidget, SettingSlider

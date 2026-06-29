@@ -9,7 +9,7 @@ from qfluentwidgets import (
 from .serializer import LanguageSerializer, ScalingSerializer
 from .enum import (
     Language, WhenClose, DanmakuType, SubtitleType, CoverType, MetadataType, ProxyType, FFmpegSource, NumberingType,
-    Scaling, FileConflictResolution, VideoContainer, AutoSelectMode, Area, DuplicateDownloadResolution
+    Scaling, FileConflictResolution, VideoContainer, AutoSelectMode, Area, DuplicateDownloadResolution, StorageType
 )
 from ._json import json_loads
 
@@ -372,6 +372,27 @@ class APPConfig(QConfig):
     proxy_port = ConfigItem("Advanced", "proxy_port", 80)
     proxy_uname = ConfigItem("Advanced", "proxy_uname", "")
     proxy_password = ConfigItem("Advanced", "proxy_password", "")
+
+    # Storage
+    storage_type = OptionsConfigItem(
+        "Storage", "storage_type",
+        StorageType.LOCAL,
+        OptionsValidator(StorageType),
+        EnumSerializer(StorageType)
+    )
+    webdav_url = ConfigItem("Storage", "webdav_url", "")
+    webdav_username = ConfigItem("Storage", "webdav_username", "")
+    webdav_password = ConfigItem("Storage", "webdav_password", "")
+    webdav_base_path = ConfigItem("Storage", "webdav_base_path", "/")
+    webdav_verify_ssl = ConfigItem("Storage", "webdav_verify_ssl", True, BoolValidator())
+    webdav_conflict_resolution = OptionsConfigItem(
+        "Storage", "webdav_conflict_resolution",
+        FileConflictResolution.AUTO_RENAME,
+        OptionsValidator(FileConflictResolution),
+        EnumSerializer(FileConflictResolution)
+    )
+    local_temp_path = ConfigItem("Storage", "local_temp_path", "")
+    cleanup_after_upload = ConfigItem("Storage", "cleanup_after_upload", True, BoolValidator())
 
     user_agent = ConfigItem("Advanced", "user_agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36 Edg/147.0.0.0")
 

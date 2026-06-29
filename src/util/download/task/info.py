@@ -35,6 +35,8 @@ class FileInfo(InfoBase):
     merge_file_ext: str = ""
 
     relative_files: list[str] = field(default_factory = list)
+    additional_files: list[str] = field(default_factory = list)
+    storage_type: str = ""
 
 @dataclass
 class EpisodeInfo(InfoBase):

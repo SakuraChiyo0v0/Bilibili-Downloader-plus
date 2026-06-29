@@ -1,5 +1,5 @@
 from ...common.data import reversed_video_quality_map, reversed_audio_quality_map, video_codec_str_map
-from ...common.enum import DownloadStatus, DownloadType, NumberingType, DuplicateDownloadResolution
+from ...common.enum import DownloadStatus, DownloadType, NumberingType, DuplicateDownloadResolution, StorageType
 from ...common._json import json_dumps, json_loads
 from ...common.timestamp import get_timestamp_ms
 from ...common.translator import Translator
@@ -60,6 +60,7 @@ class TaskManager:
         # FileNameInfo
         # 下载目录在生成 TaskInfo 时就确定，后续即便修改了下载目录的设置，也不会影响已生成的 TaskInfo 中的下载目录，避免下载过程中下载目录发生变化导致的问题
         task_info.File.download_path = config.get(config.download_path)
+        task_info.File.storage_type = config.get(config.storage_type).value
 
         self.__update_file_name_info(task_info)
 

@@ -142,8 +142,8 @@ class DownloadListModel(CoverQueryModelBase):
             case DownloadStatus.DOWNLOADING:
                 downloader_manager.wait(task_info, lambda: task_manager.cancel(task_info))
 
-            case DownloadStatus.MERGING | DownloadStatus.CONVERTING:
-                # 合并和转换中的任务不允许取消
+            case DownloadStatus.MERGING | DownloadStatus.CONVERTING | DownloadStatus.UPLOADING:
+                # 合并、转换和上传中的任务不允许取消
                 return
 
             case _:
@@ -172,8 +172,8 @@ class DownloadListModel(CoverQueryModelBase):
 
     def batch_cancel(self):
         for task in list(self._task_list):
-            if task.Download.status not in [DownloadStatus.MERGING, DownloadStatus.CONVERTING]:
-                # 只有非合并中的任务才允许取消
+            if task.Download.status not in [DownloadStatus.MERGING, DownloadStatus.CONVERTING, DownloadStatus.UPLOADING]:
+                # 只有非合并 / 转换 / 上传中的任务才允许取消
                 self.cancelDownload(task)
 
     def manageConcurrentDownloads(self):

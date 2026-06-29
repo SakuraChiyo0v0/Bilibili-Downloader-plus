@@ -8,8 +8,9 @@ from qfluentwidgets import (
 
 from gui.component.setting import (
     PrioritySettingCard, DanmakuSettingCard, SubtitleSettingCard, CoverSettingCard, MetadataSettingCard, CDNSettingCard, ProxySettingCard,
-    FFmpegSettingCard, NumberSettingCard, DownloadFormatCard, DownloadPathSettingCard, ParsingSettingCard, WindowBehaviorSettingCard,
-    DownloadHandlingSettingCard, DownloadConcurrencySettingCard, PersonalizationCard, CheckUpdateSettingCard, OtherAdvancedSettingCard
+    FFmpegSettingCard, NumberSettingCard, DownloadFormatCard, ParsingSettingCard, WindowBehaviorSettingCard,
+    DownloadHandlingSettingCard, DownloadConcurrencySettingCard, PersonalizationCard, CheckUpdateSettingCard, OtherAdvancedSettingCard,
+    StorageSettingCard
 )
 
 from util.common.data import video_quality_map, audio_quality_map, video_codec_map
@@ -52,10 +53,10 @@ class SettingInterface(ScrollArea):
         # Download
         self.download_group = SettingCardGroup(self.tr("Download"), self)
 
-        self.download_path_card = DownloadPathSettingCard(self.main_window, save = True, parent = self)
         self.download_currency_card = DownloadConcurrencySettingCard(self)
         self.priority_setting_card = PrioritySettingCard(self.main_window, parent = self)
         self.download_format_card = DownloadFormatCard(self)
+        self.storage_setting_card = StorageSettingCard(self.main_window, parent = self)
 
         # Additional
         self.additional_group = SettingCardGroup(self.tr("Danmaku, Subtitles, Cover, and Metadata"), self)
@@ -96,10 +97,10 @@ class SettingInterface(ScrollArea):
         self.behavior_group.addSettingCard(self.download_handling_card)
 
         # Download
-        self.download_group.addSettingCard(self.download_path_card)
         self.download_group.addSettingCard(self.download_currency_card)
         self.download_group.addSettingCard(self.priority_setting_card)
         self.download_group.addSettingCard(self.download_format_card)
+        self.download_group.addSettingCard(self.storage_setting_card)
 
         # Additional
         self.additional_group.addSettingCard(self.danmaku_setting_card)

@@ -237,7 +237,10 @@ class UIData(QObject):
             
             case DownloadStatus.CONVERTING:
                 return Translator.TIP_MESSAGES("CONVERTING")
-            
+
+            case DownloadStatus.UPLOADING:
+                return "上传中…"
+
             case DownloadStatus.COMPLETED:
                 return Translator.TIP_MESSAGES("COMPLETED")
             

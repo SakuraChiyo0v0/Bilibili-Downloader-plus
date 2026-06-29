@@ -107,6 +107,10 @@ class MediaType(IntEnum):
     FLV = 3
     M4A = 4
 
+class StorageType(Enum):
+    LOCAL = "local"
+    WEBDAV = "webdav"
+
 class DownloadStatus(IntEnum):
     QUEUED = 0                      # 排队中
     PARSING = 1                     # 解析中
@@ -120,6 +124,8 @@ class DownloadStatus(IntEnum):
     CONVERTING = 7                  # 转换中
 
     ADDITIONAL_PROCESSING = 8       # 额外处理（如提取封面、生成字幕等）
+
+    UPLOADING = 9                   # 上传到远程存储中
 
     FAILED = 100                    # 下载失败
     FFMPEG_FAILED = 101             # FFmpeg 处理失败

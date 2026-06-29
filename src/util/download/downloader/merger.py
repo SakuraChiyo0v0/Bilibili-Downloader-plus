@@ -1,6 +1,6 @@
 from PySide6.QtCore import QObject
 
-from ...common.enum import DownloadStatus, DownloadType, OriginalFileType, ToastNotificationCategory
+from ...common.enum import DownloadStatus, DownloadType, OriginalFileType, ToastNotificationCategory, StorageType
 from ...common.io.file import safe_remove, safe_rename
 from ...common.timestamp import get_timestamp
 from ...common.signal_bus import signal_bus
@@ -9,6 +9,10 @@ from ...common.config import config
 
 from ...ffmpeg.command import FFmpegCommand
 from ...ffmpeg.runner import FFmpegRunner
+
+from ...storage.factory import StorageProviderFactory
+from ...storage.upload_worker import UploadWorker
+from ...thread.async_ import AsyncTask
 
 from ..task.manager import task_manager
 from ..task.info import TaskInfo
@@ -128,7 +132,7 @@ class Merger(QObject):
                 final_audio_file_name = safe_rename(cwd, self._output_audio_file, self.final_audio_file_name).name
                 self.add_file(final_audio_file_name, clear = True)
 
-            self.mark_as_completed()
+            self.finish()
 
         except Exception as e:
             self.set_error_message(Translator.ERROR_MESSAGES("RENAME_FAILED"), str(e))
@@ -153,7 +157,7 @@ class Merger(QObject):
                 safe_remove(cwd, *self.task_info.File.relative_files)
 
             self.add_file(final_output_file_name, *kept_original_files, clear = True)
-            self.mark_as_completed()
+            self.finish()
 
         except Exception as e:
             self.set_error_message(Translator.ERROR_MESSAGES("RENAME_FAILED"), str(e))
@@ -181,6 +185,65 @@ class Merger(QObject):
         signal_bus.download.auto_manage_concurrent_downloads.emit()
         signal_bus.download.add_to_completed_list.emit([self.task_info])
         signal_bus.download.remove_from_downloading_list.emit(self.task_info)
+
+    def finish(self):
+        if getattr(self, "_has_error", False):
+            return
+
+        if self.task_info.File.storage_type == StorageType.LOCAL.value:
+            self.mark_as_completed()
+        else:
+            self.start_upload()
+
+    def start_upload(self):
+        self.task_info.Download.status = DownloadStatus.UPLOADING
+        self.task_info.Download.info_label = "上传中…"
+        signal_bus.download.update_downloading_item.emit(self.task_info)
+
+        provider = StorageProviderFactory.create_from_config()
+        worker = UploadWorker(self.task_info, provider)
+        worker.progress.connect(self.on_upload_progress)
+        worker.success.connect(self.on_upload_success)
+        worker.error.connect(self.on_upload_error)
+        AsyncTask.run(worker)
+
+    def on_upload_progress(self, uploaded: int, total: int):
+        self.task_info.Download.downloaded_size = uploaded
+        self.task_info.Download.total_size = total
+        self.task_info.Download.progress = int(uploaded / total * 100) if total else 0
+        signal_bus.download.update_downloading_item.emit(self.task_info)
+
+    def on_upload_success(self):
+        if getattr(self, "_has_error", False):
+            return
+
+        if config.get(config.cleanup_after_upload):
+            self._cleanup_local_files()
+
+        self.mark_as_completed()
+
+    def on_upload_error(self, error_message: str):
+        self._has_error = True
+        self.task_info.Download.status = DownloadStatus.FAILED
+        signal_bus.download.update_downloading_item.emit(self.task_info)
+
+        signal_bus.toast.show_long_message.emit(
+            ToastNotificationCategory.ERROR,
+            "上传失败",
+            error_message
+        )
+
+        signal_bus.download.auto_manage_concurrent_downloads.emit()
+
+    def _cleanup_local_files(self):
+        cwd = self.get_cwd()
+
+        file_names = list(self.task_info.File.relative_files)
+        for name in self.task_info.File.additional_files:
+            if name not in file_names:
+                file_names.append(name)
+
+        safe_remove(cwd, *file_names)
 
     def keep_original_files(self):
         try:
@@ -373,7 +436,7 @@ class Merger(QObject):
             final_file_name = safe_rename(cwd, self._cover_embed_temp_output, self._cover_embed_final).name
 
             self.add_file(final_file_name, clear = True)
-            self.mark_as_completed()
+            self.finish()
 
         except Exception as e:
             self.set_error_message(Translator.ERROR_MESSAGES("RENAME_FAILED"), str(e))

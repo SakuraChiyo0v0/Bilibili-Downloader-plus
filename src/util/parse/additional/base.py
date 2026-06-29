@@ -27,13 +27,18 @@ class AdditionalParserBase(ParserBase):
         else:
             name_parts = name
 
-        path = self.__base_path / f"{name_parts}.{suffix}"
+        file_name = f"{name_parts}.{suffix}"
+        path = self.__base_path / file_name
         path.parent.mkdir(parents = True, exist_ok = True)
 
         with open(path, mode, encoding = encoding) as f:
             f.write(contents)
 
         self._update_file_size(path)
+
+        # 记录附加文件用于后续上传
+        if file_name not in self.task_info.File.additional_files:
+            self.task_info.File.additional_files.append(file_name)
 
     def _update_file_size(self, path: Path):
         if path.exists():
