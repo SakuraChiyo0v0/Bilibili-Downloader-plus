@@ -16,13 +16,18 @@ cz.toml
 # uv
 uv.toml
 
+# 构建产物
+/Bili23-Downloader/
+*.zip
+/build
+/dist
+
 # 其他文件
 .DS_Store
 /test
 /json
 /bundle
 /.VSCodeCounter
-/bundle
 
 # webui
 /src/webui/
