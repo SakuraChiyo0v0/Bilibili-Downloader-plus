@@ -79,10 +79,10 @@ jobs:
       - name: Update Inno Setup script with version
         run: |
           $setupPath = "assets\setup.iss"
-          $content = Get-Content $setupPath -Raw
+          $content = Get-Content $setupPath -Raw -Encoding UTF8
           $content = $content -replace '(?m)^#define\s+MyAppVersion\s+".*?"', "#define MyAppVersion `"$env:VERSION`""
           $content = $content -replace '(?m)^#define\s+MyAppVersionName\s+".*?"', "#define MyAppVersionName `"$env:VERSION_NAME`""
-          [System.IO.File]::WriteAllText((Resolve-Path $setupPath), $content, (New-Object System.Text.UTF8Encoding($false)))
+          [System.IO.File]::WriteAllText((Resolve-Path $setupPath), $content, (New-Object System.Text.UTF8Encoding($true)))
 
       - name: Install Inno Setup and Chinese language pack
         run: |

@@ -1,5 +1,5 @@
 from PySide6.QtWidgets import QHBoxLayout, QVBoxLayout, QLabel, QFileDialog
-from PySide6.QtCore import QTimer, Signal, Qt
+from PySide6.QtCore import QLocale, QTimer, Signal, Qt
 from PySide6.QtGui import QColor
 
 from qfluentwidgets import (
@@ -14,6 +14,7 @@ from .widget import SettingSwitchButton, SettingComboBox, SettingSlider
 
 from util.common.config import config, isWin11, APPConfig
 from util.thread.pool import GlobalThreadPoolTask
+from util.common.enum import Language
 from util.common.icon import ExtendedFluentIcon
 from util.common.io.directory import Directory
 from util.common.translator import Translator
@@ -485,6 +486,23 @@ class DownloadFormatCard(ExpandGroupSettingCard):
         self.addGroup(FluentIcon.MUSIC, self.tr("Convert M4A to MP3"), self.tr("Only applies when downloading audio-only streams. Disabled if video is also selected."), self.m4a_to_mp3_switch)
 
 class ParsingSettingCard(ExpandGroupSettingCard):
+    def tr_with_chinese_fallback(self, source: str, simplified: str, traditional: str):
+        text = self.tr(source)
+
+        if text != source:
+            return text
+
+        language = config.get(config.language)
+        locale_name = QLocale.system().name() if language == Language.AUTO else language.value.name()
+
+        if locale_name.startswith("zh_TW") or locale_name.startswith("zh_HK") or locale_name.startswith("zh_MO"):
+            return traditional
+
+        if locale_name.startswith("zh"):
+            return simplified
+
+        return source
+
     def __init__(self, parent = None):
         super().__init__(FluentIcon.SEARCH, self.tr("Parsing Settings"), self.tr("Configure clipboard monitoring, parse history, and parse list options"), parent)
 
@@ -492,10 +510,12 @@ class ParsingSettingCard(ExpandGroupSettingCard):
         self.custom_monitor_clipboard_btn = PushButton(self.tr("Configure…"), self)
         self.custom_auto_select_btn = PushButton(self.tr("Configure…"), self)
         self.parse_history_switch = SettingSwitchButton(config.parse_history, parent = self)
+        self.optimize_ugc_season_list_parse_switch = SettingSwitchButton(config.optimize_ugc_season_list_parse, parent = self)
 
         self.addGroup("", self.tr("Parse List Settings"), self.tr("Customize the display and behavior of the parse list"), self.custom_parse_list_btn)
         self.addGroup("", self.tr("Monitor Clipboard Settings"), self.tr("Configure the behavior of clipboard monitoring"), self.custom_monitor_clipboard_btn)
         self.addGroup("", self.tr("Auto-select Download Items Settings"), self.tr("Configure how items in the parse list are automatically selected after parsing"), self.custom_auto_select_btn)
+        self.addGroup("", self.tr_with_chinese_fallback("Optimize Collection Links", "优化合集链接解析", "最佳化合集連結解析"), self.tr_with_chinese_fallback("Parse subscription collection links through video details to show all items and multi-part videos when possible", "尽可能通过视频详情解析订阅合集链接，以显示全部项目和分 P 视频", "盡可能透過影片詳情解析訂閱合集連結，以顯示全部項目和分 P 影片"), self.optimize_ugc_season_list_parse_switch)
         self.addGroup("", self.tr("Save Parse History"), self.tr("Save the history of parsed links"), self.parse_history_switch)
 
 class WindowBehaviorSettingCard(ExpandGroupSettingCard):

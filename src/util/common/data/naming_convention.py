@@ -24,40 +24,56 @@ class VariableListFactory:
     def build(self, type):
         match type:
             case ConventionType.NORMAL:
-                return self._base_variable + self._normal_variable
+                variable_list = self._base_variable + self._normal_variable
             
             case ConventionType.PART:
-                return self._base_variable + self._part_variable
+                variable_list = self._base_variable + self._part_variable
             
             case ConventionType.COLLECTION:
-                return self._base_variable + self._collection_variable
+                variable_list = self._base_variable + self._collection_variable
             
             case ConventionType.INTERACTIVE_VIDEO:
-                return self._base_variable + self._interactive_video_variable
+                variable_list = self._base_variable + self._interactive_video_variable
             
             case ConventionType.BANGUMI:
-                return self._base_variable + self._bangumi_variable
+                variable_list = self._base_variable + self._bangumi_variable
             
             case ConventionType.CHEESE:
-                return self._base_variable + self._cheese_variable
+                variable_list = self._base_variable + self._cheese_variable
             
             case ConventionType.FAVORITE:
-                return self._base_variable + self._normal_variable + self._favorite_variable
+                variable_list = self._base_variable + self._normal_variable + self._optional_part_variable + self._favorite_variable
 
             case ConventionType.SPACE:
-                return self._base_variable + self._normal_variable + self._space_variable
+                variable_list = self._base_variable + self._normal_variable + self._optional_part_variable + self._space_variable
             
             case ConventionType.HISTORY:
-                return self._base_variable + self._history_variable
+                variable_list = self._base_variable + self._history_variable + self._optional_part_variable
 
             case ConventionType.WATCH_LATER:
-                return self._base_variable + self._watch_later_variable
+                variable_list = self._base_variable + self._watch_later_variable + self._optional_part_variable
             
             case ConventionType.WEEKLY:
-                return self._base_variable + self._weekly_variable
+                variable_list = self._base_variable + self._weekly_variable + self._optional_part_variable
 
             case ConventionType.AUDIO:
-                return self._audio_variable
+                variable_list = self._audio_variable
+
+            case _:
+                variable_list = []
+
+        return variable_list + self._conditional_separator_variable
+
+    @property
+    def _conditional_separator_variable(self):
+        return [
+            {
+                "name": "-",
+                "variable": "{-}",
+                "description": "CONDITIONAL_HYPHEN",
+                "example": "-"
+            }
+        ]
 
     @property
     def _base_variable(self):
@@ -175,6 +191,12 @@ class VariableListFactory:
                 "example": "04 アルカテイル"
             },
             {
+                "name": "part_title",
+                "variable": "{part_title}",
+                "description": "PART_TITLE_FOR_PART",
+                "example": "Part Title"
+            },
+            {
                 "name": "aid",
                 "variable": "{aid}",
                 "description": "AID",
@@ -191,6 +213,17 @@ class VariableListFactory:
                 "variable": "{cid}",
                 "description": "CID",
                 "example": "442845594"
+            }
+        ]
+
+    @property
+    def _optional_part_variable(self):
+        return [
+            {
+                "name": "part_title",
+                "variable": "{part_title}",
+                "description": "PART_TITLE_FOR_PART",
+                "example": "Part Title"
             }
         ]
 
@@ -226,6 +259,12 @@ class VariableListFactory:
                 "variable": "{p}",
                 "description": "PART_NUMBER_FOR_COLLECTION",
                 "example": 3
+            },
+            {
+                "name": "part_title",
+                "variable": "{part_title}",
+                "description": "PART_TITLE_FOR_COLLECTION",
+                "example": "Part Title"
             },
             {
                 "name": "aid",

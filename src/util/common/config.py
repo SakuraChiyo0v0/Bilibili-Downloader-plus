@@ -160,14 +160,14 @@ class DefaultValue:
             "id": "2d98a265-e8e1-4b2a-8133-76bbc65c90fe",
             "name": "DEFAULT_FOR_PART",
             "type": 12,
-            "rule": "{parent_title}/P{p}-{leaf_title}",
+            "rule": "{leaf_title}/P{p}{-}{part_title}",
             "default": True
         },
         {
             "id": "307906bd-86a2-4b6b-bd75-152a8c3e280b",
             "name": "DEFAULT_FOR_COLLECTION",
             "type": 13,
-            "rule": "{collection_title}/{section_title}/{parent_title}/{leaf_title}",
+            "rule": "{collection_title}/{section_title}/{leaf_title}{-}{part_title}",
             "default": True
         },
         {
@@ -195,35 +195,35 @@ class DefaultValue:
             "id": "5913e25f-0bf3-4d3c-a608-8416af778a8a",
             "name": "DEFAULT_FOR_FAVORITE",
             "type": 40,
-            "rule": "{favorites_owner_id}_{favorites_owner}/{favorites_name}/{leaf_title}",
+            "rule": "{favorites_owner_id}_{favorites_owner}/{favorites_name}/{leaf_title}{-}{part_title}",
             "default": True
         },
         {
             "id": "8c48ac82-14c5-4d48-9de7-225d9b53513f",
             "name": "DEFAULT_FOR_SPACE",
             "type": 50,
-            "rule": "{space_owner_id}_{space_owner}/{leaf_title}",
+            "rule": "{space_owner_id}_{space_owner}/{leaf_title}{-}{part_title}",
             "default": True
         },
         {
             "id": "307ccc8e-ad2f-4195-94f0-162ee9ff1ac0",
             "name": "DEFAULT_FOR_HISTORY",
             "type": 60,
-            "rule": "{parent_title}/{leaf_title}",
+            "rule": "{parent_title}/{leaf_title}{-}{part_title}",
             "default": True
         },
         {
             "id": "0a72a82b-5684-448e-9db1-a342de933d3e",
             "name": "DEFAULT_FOR_WATCH_LATER",
             "type": 70,
-            "rule": "{parent_title}/{leaf_title}",
+            "rule": "{parent_title}/{leaf_title}{-}{part_title}",
             "default": True
         },
         {
             "id": "4d28285d-65ca-4c5c-bbb3-b3b5b570c52a",
             "name": "DEFAULT_FOR_WEEKLY",
             "type": 80,
-            "rule": "{parent_title}/{leaf_title}",
+            "rule": "{parent_title}/{leaf_title}{-}{part_title}",
             "default": True
         },
         {
@@ -292,7 +292,7 @@ class APPConfig(QConfig):
     app_name = "Bili23 Downloader"
     app_version = "2.10.4"
     app_comparable_version = "2.10.4"
-    app_config_version = 2100
+    app_config_version = 2103
     config_version = ConfigItem("Application", "config_version", app_config_version)
 
     # Interface
@@ -305,6 +305,7 @@ class APPConfig(QConfig):
     parse_list_alternate_row_color = ConfigItem("Behavior", "parse_list_alternate_row_color", True, BoolValidator())
 
     monitor_clipboard = ConfigItem("Behavior", "monitor_clipboard", False, BoolValidator())
+    optimize_ugc_season_list_parse = ConfigItem("Behavior", "optimize_ugc_season_list_parse", True, BoolValidator())
     show_download_confirmation_dialog = ConfigItem("Behavior", "show_download_confirmation_dialog", False, BoolValidator())
     auto_select_mode = OptionsConfigItem("Behavior", "auto_select_mode_", AutoSelectMode.CONDITIONAL, OptionsValidator(AutoSelectMode), EnumSerializer(AutoSelectMode))
     auto_select_conditions = ConfigItem("Behavior", "auto_select_conditions", DefaultValue.auto_select_conditions)
@@ -489,10 +490,113 @@ def check_need_patch():
 
 def patch_config(config_version: int):
     # 配置文件修补
-    
+    if config_version < 2101:
+        patch_part_title_naming_rules()
+
+    if config_version < 2103:
+        patch_conditional_hyphen_naming_rules()
+
     # 完成修补，写入新的 config_version
     config.set(config.config_version, config.app_config_version)
     config.save()
+
+def patch_part_title_naming_rules():
+    # Only migrate untouched preset rules so user-customized naming rules are preserved.
+    updates = {
+        "2d98a265-e8e1-4b2a-8133-76bbc65c90fe": (
+            "{parent_title}/P{p}-{leaf_title}",
+            "{leaf_title}/P{p}-{part_title}",
+        ),
+        "307906bd-86a2-4b6b-bd75-152a8c3e280b": (
+            "{collection_title}/{section_title}/{parent_title}/{leaf_title}",
+            "{collection_title}/{section_title}/{leaf_title}/{part_title}",
+        ),
+        "5913e25f-0bf3-4d3c-a608-8416af778a8a": (
+            "{favorites_owner_id}_{favorites_owner}/{favorites_name}/{leaf_title}",
+            "{favorites_owner_id}_{favorites_owner}/{favorites_name}/{leaf_title}/{part_title}",
+        ),
+        "8c48ac82-14c5-4d48-9de7-225d9b53513f": (
+            "{space_owner_id}_{space_owner}/{leaf_title}",
+            "{space_owner_id}_{space_owner}/{leaf_title}/{part_title}",
+        ),
+        "307ccc8e-ad2f-4195-94f0-162ee9ff1ac0": (
+            "{parent_title}/{leaf_title}",
+            "{parent_title}/{leaf_title}/{part_title}",
+        ),
+        "0a72a82b-5684-448e-9db1-a342de933d3e": (
+            "{parent_title}/{leaf_title}",
+            "{parent_title}/{leaf_title}/{part_title}",
+        ),
+        "4d28285d-65ca-4c5c-bbb3-b3b5b570c52a": (
+            "{parent_title}/{leaf_title}",
+            "{parent_title}/{leaf_title}/{part_title}",
+        ),
+    }
+
+    rule_list = config.get(config.naming_rule_list)
+    if not isinstance(rule_list, list):
+        return
+
+    changed = False
+
+    for entry in rule_list:
+        old_rule, new_rule = updates.get(entry.get("id"), (None, None))
+
+        if old_rule is not None and entry.get("rule") == old_rule:
+            entry["rule"] = new_rule
+            changed = True
+
+    if changed:
+        config.set(config.naming_rule_list, rule_list)
+
+def patch_conditional_hyphen_naming_rules():
+    # Only migrate untouched preset rules so user-customized naming rules are preserved.
+    updates = {
+        "2d98a265-e8e1-4b2a-8133-76bbc65c90fe": (
+            "{leaf_title}/P{p}-{part_title}",
+            "{leaf_title}/P{p}{-}{part_title}",
+        ),
+        "307906bd-86a2-4b6b-bd75-152a8c3e280b": (
+            "{collection_title}/{section_title}/{leaf_title}/{part_title}",
+            "{collection_title}/{section_title}/{leaf_title}{-}{part_title}",
+        ),
+        "5913e25f-0bf3-4d3c-a608-8416af778a8a": (
+            "{favorites_owner_id}_{favorites_owner}/{favorites_name}/{leaf_title}/{part_title}",
+            "{favorites_owner_id}_{favorites_owner}/{favorites_name}/{leaf_title}{-}{part_title}",
+        ),
+        "8c48ac82-14c5-4d48-9de7-225d9b53513f": (
+            "{space_owner_id}_{space_owner}/{leaf_title}/{part_title}",
+            "{space_owner_id}_{space_owner}/{leaf_title}{-}{part_title}",
+        ),
+        "307ccc8e-ad2f-4195-94f0-162ee9ff1ac0": (
+            "{parent_title}/{leaf_title}/{part_title}",
+            "{parent_title}/{leaf_title}{-}{part_title}",
+        ),
+        "0a72a82b-5684-448e-9db1-a342de933d3e": (
+            "{parent_title}/{leaf_title}/{part_title}",
+            "{parent_title}/{leaf_title}{-}{part_title}",
+        ),
+        "4d28285d-65ca-4c5c-bbb3-b3b5b570c52a": (
+            "{parent_title}/{leaf_title}/{part_title}",
+            "{parent_title}/{leaf_title}{-}{part_title}",
+        ),
+    }
+
+    rule_list = config.get(config.naming_rule_list)
+    if not isinstance(rule_list, list):
+        return
+
+    changed = False
+
+    for entry in rule_list:
+        old_rule, new_rule = updates.get(entry.get("id"), (None, None))
+
+        if old_rule is not None and entry.get("rule") == old_rule:
+            entry["rule"] = new_rule
+            changed = True
+
+    if changed:
+        config.set(config.naming_rule_list, rule_list)
 
 config = APPConfig()
 config.themeMode.value = Theme.AUTO

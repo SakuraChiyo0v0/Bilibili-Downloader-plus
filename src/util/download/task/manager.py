@@ -90,18 +90,22 @@ class TaskManager:
 
         title = episode_info.get("title", "")
         attr = episode_info.get("attribute", 0)
+        related_titles = episode_info.get("related_titles", {})
+        parent_title = related_titles.get("parent_title", "")
+        is_part = bool(episode_info.get("part_number", 0) and parent_title)
 
-        # 对于任何类型视频，都保存一个 leaf_title 备用，供下载收藏夹和个人空间时使用
-        episode_info["leaf_title"] = title
+        # leaf_title always points to the video/content title; part_title keeps the current P title.
+        episode_info["leaf_title"] = parent_title if is_part else title
+        episode_info["part_title"] = title if is_part else ""
 
-        # 对于剧集和课程，使用 episode_title 表示剧集名称或课程名称，leaf_title 表示分P标题
+        # 对于剧集和课程，使用 episode_title 表示剧集名称或课程名称
         if attr & Attribute.BANGUMI_BIT != 0 or attr & Attribute.CHEESE_BIT != 0:
             episode_info["episode_title"] = title
 
         data = {
             **episode_info,
             **extra_data,
-            **episode_info.get("related_titles", {}),
+            **related_titles,
             **episode_info.get("uploader_info", {}),
             "number": number
         }
@@ -134,7 +138,8 @@ class TaskManager:
 
     def __filter_illegal_characters(self, episode_info: dict):
         title_list = [
-            "leaf_title", 
+            "leaf_title",
+            "part_title",
             "parent_title",
             "section_title",
             "collection_title",

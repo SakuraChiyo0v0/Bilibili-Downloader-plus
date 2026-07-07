@@ -7,6 +7,7 @@ from ..common.config import config
 from .time import Time
 
 from pathlib import Path
+from string import Formatter
 from typing import List
 import logging
 
@@ -50,12 +51,59 @@ class FileNameFormatter:
             if self.attribute:
                 self.rule = self.get_special_rule()
 
-            return self.__normalize_path(self.rule.format(**self.variable_data))
-        
+            return self.__normalize_path(self.__format_rule(self.rule))
+
         except Exception as e:
             logger.exception(f"格式化文件名时发生错误")
 
             return None
+
+    def __format_rule(self, rule: str):
+        formatter = Formatter()
+        parsed_rule = list(formatter.parse(rule))
+        result = []
+
+        for index, (literal_text, field_name, format_spec, conversion) in enumerate(parsed_rule):
+            result.append(literal_text)
+
+            if field_name is None:
+                continue
+
+            if self.__is_conditional_hyphen(field_name, format_spec, conversion):
+                result.append("-" if self.__has_next_variable_value(parsed_rule, index + 1, formatter) else "")
+
+                continue
+
+            result.append(self.__format_field(formatter, field_name, format_spec, conversion))
+
+        return "".join(result)
+
+    def __is_conditional_hyphen(self, field_name: str, format_spec: str, conversion: str):
+        return field_name == "-" and not format_spec and conversion is None
+
+    def __has_next_variable_value(self, parsed_rule: list, start_index: int, formatter: Formatter):
+        for _, field_name, format_spec, conversion in parsed_rule[start_index:]:
+            if field_name is None:
+                continue
+
+            if self.__is_conditional_hyphen(field_name, format_spec, conversion):
+                continue
+
+            value = self.__format_field(formatter, field_name, format_spec, conversion)
+
+            return value != ""
+
+        return False
+
+    def __format_field(self, formatter: Formatter, field_name: str, format_spec: str, conversion: str):
+        value, _ = formatter.get_field(field_name, (), self.variable_data)
+        value = formatter.convert_field(value, conversion)
+        format_spec = formatter.vformat(format_spec, (), self.variable_data)
+
+        if value is None:
+            return ""
+
+        return formatter.format_field(value, format_spec)
 
     def __normalize_path(self, path_str: str):
         if not path_str:
@@ -126,6 +174,7 @@ class FileNameFormatter:
             "season_id": task_info.Episode.season_id,
 
             "leaf_title": task_info.Episode.leaf_title,
+            "part_title": task_info.Episode.part_title,
             "parent_title": task_info.Episode.parent_title,
             "section_title": task_info.Episode.section_title,
             "collection_title": task_info.Episode.collection_title,
@@ -181,4 +230,3 @@ class FileNameFormatter:
                 rule_list.append(entry)
 
         return rule_list
-    

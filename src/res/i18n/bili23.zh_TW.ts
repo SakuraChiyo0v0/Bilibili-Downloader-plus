@@ -3131,6 +3131,16 @@ For example, if you set the video quality priority to 720P &gt; 1080P &gt; 4K, t
     </message>
     <message>
         <location filename="../../gui/component/setting/card.py" line="474"/>
+        <source>Optimize Collection Links</source>
+        <translation>最佳化合集連結解析</translation>
+    </message>
+    <message>
+        <location filename="../../gui/component/setting/card.py" line="474"/>
+        <source>Parse subscription collection links through video details to show all items and multi-part videos when possible</source>
+        <translation>盡可能透過影片詳情解析訂閱合集連結，以顯示全部項目和分 P 影片</translation>
+    </message>
+    <message>
+        <location filename="../../gui/component/setting/card.py" line="474"/>
         <source>Save Parse History</source>
         <translation>儲存解析記錄</translation>
     </message>

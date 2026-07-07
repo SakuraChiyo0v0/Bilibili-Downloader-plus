@@ -56,6 +56,7 @@ class EpisodeInfo(InfoBase):
     episode_number: int = 0
 
     leaf_title: str = ""
+    part_title: str = ""
     parent_title: str = ""
     section_title: str = ""
     collection_title: str = ""

@@ -4,10 +4,12 @@ from ..common.data.auto_parse import AutoParsePayload
 from ..common.translator import Translator
 from ..common.data import url_patterns
 from ..common.enum import ParserType
+from ..common.config import config
 from .episode.tree import EpisodeData
 
 from threading import Event
 import logging
+from urllib.parse import parse_qs, urlparse
 
 logger = logging.getLogger(__name__)
 
@@ -61,8 +63,62 @@ class WorkerBase:
         for parser_type, pattern in url_patterns:
             if pattern.search(url):
                 return parser_type
-            
+
         raise ValueError(Translator.ERROR_MESSAGES("INVALID_LINK"))
+
+    def optimize_parser(self, url: str, parser_type: str):
+        if parser_type == "list" and config.get(config.optimize_ugc_season_list_parse):
+            return self.try_optimize_ugc_season_list(url)
+
+        return url, parser_type
+
+    def try_optimize_ugc_season_list(self, url: str):
+        canonical_url = self.get_canonical_ugc_season_list_url(url)
+
+        if not canonical_url:
+            return url, "list"
+
+        try:
+            from .parser.list import ListParser
+
+            parser = ListParser()
+            info_data = parser.parse(canonical_url, 1, get_info_data = True)
+            archives = info_data.get("data", {}).get("archives", [])
+            bvid = next((entry.get("bvid") for entry in archives if entry.get("bvid")), "")
+
+            if not bvid:
+                return url, "list"
+
+            optimized_url = f"https://www.bilibili.com/video/{bvid}"
+            logger.info("合集列表链接已优化为投稿视频链接：%s -> %s", url, optimized_url)
+
+            return optimized_url, "video"
+
+        except Exception:
+            logger.warning("合集列表链接优化失败，将回退到原解析链路：%s", url, exc_info = True)
+
+            return url, "list"
+
+    def get_canonical_ugc_season_list_url(self, url: str):
+        parsed_url = urlparse(url if "://" in url else f"https://{url}")
+
+        if parsed_url.netloc != "space.bilibili.com":
+            return ""
+
+        path_parts = [part for part in parsed_url.path.split("/") if part]
+
+        if len(path_parts) != 3 or path_parts[1] != "lists":
+            return ""
+
+        mid, season_id = path_parts[0], path_parts[2]
+
+        if not mid.isdigit() or not season_id.isdigit():
+            return ""
+
+        if parse_qs(parsed_url.query).get("type", [""])[0] != "season":
+            return ""
+
+        return f"https://space.bilibili.com/{mid}/lists/{season_id}?type=season"
 
 class ParseWorker(WorkerBase, QObject):
     success = Signal(str, dict)
@@ -84,6 +140,8 @@ class ParseWorker(WorkerBase, QObject):
             self.parser_type = self.get_parser_type(self.url)
 
             self.get_redirect_url()
+
+            self.url, self.parser_type = self.optimize_parser(self.url, self.parser_type)
 
             parser = self.get_parser(self.parser_type)
 

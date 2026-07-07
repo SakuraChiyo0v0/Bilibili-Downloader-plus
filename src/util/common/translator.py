@@ -180,6 +180,7 @@ class Translator:
             "VIDEO_QUALITY": translate("VARIABLE_DESCRIPTION", "Video quality"),
             "AUDIO_QUALITY": translate("VARIABLE_DESCRIPTION", "Audio quality"),
             "VIDEO_CODEC": translate("VARIABLE_DESCRIPTION", "Video codec"),
+            "CONDITIONAL_HYPHEN": translate("VARIABLE_DESCRIPTION", "Conditional hyphen; outputs '-' only when the next variable is not empty"),
 
             "AID": translate("VARIABLE_DESCRIPTION", "av number"),
             "BVID": translate("VARIABLE_DESCRIPTION", "BV number"),
@@ -188,8 +189,8 @@ class Translator:
             "SEASON_ID": translate("VARIABLE_DESCRIPTION", "Season id"),
 
             "LEAF_TITLE_FOR_NORMAL": translate("VARIABLE_DESCRIPTION", "Full video title"),
-            "LEAF_TITLE_FOR_PART": translate("VARIABLE_DESCRIPTION", "Current part's title"),
-            "LEAF_TITLE_FOR_COLLECTION": translate("VARIABLE_DESCRIPTION", "Content title (video title for single videos, part title for multi-part)"),
+            "LEAF_TITLE_FOR_PART": translate("VARIABLE_DESCRIPTION", "Full video title"),
+            "LEAF_TITLE_FOR_COLLECTION": translate("VARIABLE_DESCRIPTION", "Content video title"),
             "LEAF_TITLE_FOR_INTERACTIVE_VIDEO": translate("VARIABLE_DESCRIPTION", "Node title"),
             "LEAF_TITLE_FOR_AUDIO": translate("VARIABLE_DESCRIPTION", "Song title"),
 
@@ -203,6 +204,8 @@ class Translator:
 
             "PART_NUMBER_FOR_PART": translate("VARIABLE_DESCRIPTION", "Part number"),
             "PART_NUMBER_FOR_COLLECTION": translate("VARIABLE_DESCRIPTION", "Part number (only for multi-part videos)"),
+            "PART_TITLE_FOR_PART": translate("VARIABLE_DESCRIPTION", "Current part title"),
+            "PART_TITLE_FOR_COLLECTION": translate("VARIABLE_DESCRIPTION", "Current part title (only for multi-part videos)"),
 
             "COLLECTION_TITLE": translate("VARIABLE_DESCRIPTION", "Collection title"),
 
@@ -344,11 +347,13 @@ Rules:
 2. Use "/" to create folders — don't start or end with "/".
 3. The part after the last "/" is the file name; before it is the directory.
 4. Available variables depend on the naming rule type (see list below).
-5. File extensions (.mp4, .m4a, etc.) are added automatically — don’t include them.
+5. Use {-} before an optional variable to output "-" only when that variable is not empty, such as {leaf_title}{-}{part_title}.
+6. File extensions (.mp4, .m4a, etc.) are added automatically — don’t include them.
 
 Examples:
 • {uploader}/{leaf_title} → Saves as "Video Title" inside "Uploader" folder
 • {uploader}_{leaf_title} → Saves directly as "Uploader_Video Title"
+• {leaf_title}{-}{part_title} → Saves as "Video Title-Part Title" or "Video Title" when part title is empty
                          
 For advanced usage, see the help documentation.""")
     
