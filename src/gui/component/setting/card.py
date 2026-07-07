@@ -284,7 +284,7 @@ class CoverSettingCard(ExpandGroupSettingCard):
 
         self.attach_cover_switch = SettingSwitchButton(config.attach_cover, parent = self)
         self.attach_cover_audio_switch = SettingSwitchButton(config.attach_cover_audio, parent = self)
-        self.auto_tag_switch = SettingSwitchButton(config.auto_tag, parent = self)
+        self.cleanup_cover_switch = SettingSwitchButton(config.cleanup_cover_after_attach, parent = self)
 
         self.viewLayout.setContentsMargins(0, 0, 0, 0)
         self.viewLayout.setSpacing(0)
@@ -293,13 +293,21 @@ class CoverSettingCard(ExpandGroupSettingCard):
         self.addGroup("", self.tr("Cover Format"), "", self.type_choice)
         self.attach_cover_group = self.addGroup("", self.tr("嵌入封面（视频+音频）"), self.tr("合并视频和音频时嵌入封面"), self.attach_cover_switch)
         self.attach_cover_audio_group = self.addGroup("", self.tr("嵌入封面（纯音频）"), self.tr("纯音频文件嵌入封面"), self.attach_cover_audio_switch)
-        self.addGroup("", self.tr("自动写入标签"), self.tr("将标题、UP主、合集等元数据写入文件"), self.auto_tag_switch)
+        self.cleanup_cover_group = self.addGroup("", self.tr("嵌入后删除封面文件"), self.tr("封面成功嵌入后自动删除下载的图片文件"), self.cleanup_cover_switch)
 
-        has_cover = config.get(config.download_cover) and not self.type_choice.currentText() == "avif"
-        self.attach_cover_group.setEnabled(has_cover)
-        self.attach_cover_audio_group.setEnabled(has_cover)
+        self.update_cover_option_states()
         self.download_switch.checkedChanged.connect(self.on_toggle_attach_cover)
         self.type_choice.currentIndexChanged.connect(self.on_change_cover_format)
+        self.attach_cover_switch.checkedChanged.connect(self.on_toggle_cover_embedding)
+        self.attach_cover_audio_switch.checkedChanged.connect(self.on_toggle_cover_embedding)
+
+    def update_cover_option_states(self):
+        has_cover = self.download_switch.isChecked() and not self.type_choice.currentText() == "avif"
+        has_embedding = self.attach_cover_switch.isChecked() or self.attach_cover_audio_switch.isChecked()
+
+        self.attach_cover_group.setEnabled(has_cover)
+        self.attach_cover_audio_group.setEnabled(has_cover)
+        self.cleanup_cover_group.setEnabled(has_cover and has_embedding)
 
     def on_change_cover_format(self, index: int):
         # avif 格式不支持作为封面嵌入，如果用户选择了 avif 作为封面格式，则禁用嵌入封面选项
@@ -311,16 +319,17 @@ class CoverSettingCard(ExpandGroupSettingCard):
             if self.attach_cover_audio_switch.isChecked():
                 self.attach_cover_audio_switch.setChecked(False)
 
-        self.attach_cover_group.setEnabled(not is_avif)
-        self.attach_cover_audio_group.setEnabled(not is_avif)
+        self.update_cover_option_states()
 
     def on_toggle_attach_cover(self, checked: bool):
-        self.attach_cover_group.setEnabled(checked)
-        self.attach_cover_audio_group.setEnabled(checked)
-
         if not checked:
             self.attach_cover_switch.setChecked(False)
             self.attach_cover_audio_switch.setChecked(False)
+
+        self.update_cover_option_states()
+
+    def on_toggle_cover_embedding(self, checked: bool):
+        self.update_cover_option_states()
 
 class MetadataSettingCard(ExpandGroupSettingCard):
     def __init__(self, parent = None):
@@ -330,12 +339,16 @@ class MetadataSettingCard(ExpandGroupSettingCard):
 
         self.type_choice = SettingComboBox(config.metadata_type, ["nfo", "json"], parent = self)
         self.type_choice.setFixedWidth(120)
+        self.auto_tag_switch = SettingSwitchButton(config.auto_tag, parent = self)
+        self.video_url_tag_switch = SettingSwitchButton(config.write_video_url_tag, parent = self)
 
         self.viewLayout.setContentsMargins(0, 0, 0, 0)
         self.viewLayout.setSpacing(0)
 
         self.addGroup("", self.tr("Download Metadata"), "", self.download_switch)
         self.addGroup("", self.tr("Metadata Format"), "", self.type_choice)
+        self.addGroup("", self.tr("自动写入标签"), self.tr("将标题、UP主、合集等元数据写入媒体文件"), self.auto_tag_switch)
+        self.addGroup("", self.tr("写入视频链接标签"), self.tr("写入 video_url 标签，用于关联原视频链接"), self.video_url_tag_switch)
 
 class NumberSettingCard(ExpandGroupSettingCard):
     def __init__(self, parent_window, parent = None):

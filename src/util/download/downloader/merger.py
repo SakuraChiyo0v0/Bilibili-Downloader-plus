@@ -31,6 +31,7 @@ class Merger(QObject):
         self._ffmpeg_runner = None
 
         self._output_audio_file = None
+        self._embedded_cover_file_name = None
 
     def start(self):
         if self.task_info.Download.merge_video_audio:
@@ -64,11 +65,14 @@ class Merger(QObject):
         o_exists = Path(cwd, self.temp_output_file_name).exists()
 
         if v_exists and a_exists:
+            cover_path = self.check_attach_cover()
+            self._embedded_cover_file_name = cover_path
+
             merge_cmd = FFmpegCommand.merge_video_audio(
                 video_path = self.temp_video_file_name,
                 audio_path = self.temp_audio_file_name,
                 output_path = self.temp_output_file_name,
-                cover_path = self.check_attach_cover(),
+                cover_path = cover_path,
                 metadata = self.get_metadata_tags()
             )
 
@@ -90,10 +94,13 @@ class Merger(QObject):
 
         self.add_file(lists_path)
 
+        cover_path = self.check_attach_cover()
+        self._embedded_cover_file_name = cover_path
+
         merge_cmd = FFmpegCommand.merge_video_parts(
             lists_path = lists_path,
             output_path = self.temp_output_file_name,
-            cover_path = self.check_attach_cover(),
+            cover_path = cover_path,
             metadata = self.get_metadata_tags()
         )
 
@@ -130,6 +137,7 @@ class Merger(QObject):
                     self._output_audio_file = self.temp_audio_file_name
 
                 final_audio_file_name = safe_rename(cwd, self._output_audio_file, self.final_audio_file_name).name
+                self.cleanup_embedded_cover()
                 self.add_file(final_audio_file_name, clear = True)
 
             self.finish()
@@ -156,6 +164,7 @@ class Merger(QObject):
 
                 safe_remove(cwd, *self.task_info.File.relative_files)
 
+            self.cleanup_embedded_cover()
             self.add_file(final_output_file_name, *kept_original_files, clear = True)
             self.finish()
 
@@ -344,6 +353,7 @@ class Merger(QObject):
             self._output_audio_file = self.temp_audio_file_name
 
             cover_path = self.check_attach_cover(config.attach_cover_audio)
+            self._embedded_cover_file_name = cover_path
 
             convert_cmd = FFmpegCommand.convert_m4a_to_mp3(
                 input_path = self._temp_m4a_audio_name,
@@ -365,19 +375,20 @@ class Merger(QObject):
 
     def get_metadata_tags(self):
         """从 Episode 信息提取元数据标签，用于音频/视频文件的 metadata 写入"""
-        if not config.get(config.auto_tag):
-            return None
-
         episode = self.task_info.Episode
         tags = {}
 
-        # title
-        if episode.leaf_title:
-            tags["title"] = episode.leaf_title
+        if config.get(config.auto_tag):
+            # title
+            if episode.leaf_title:
+                tags["title"] = episode.leaf_title
 
-        # artist (视频 UP 主)
-        if episode.uploader:
-            tags["artist"] = episode.uploader
+            # artist (视频 UP 主)
+            if episode.uploader:
+                tags["artist"] = episode.uploader
+
+        if config.get(config.write_video_url_tag) and episode.url:
+            tags["video_url"] = episode.url
 
         return tags if tags else None
 
@@ -393,6 +404,22 @@ class Merger(QObject):
                 logger.warning(f"封面文件 {cover_path} 不存在，无法嵌入封面")
         return None
 
+    def cleanup_embedded_cover(self):
+        cover_file_name = getattr(self, "_embedded_cover_file_name", None)
+
+        if not cover_file_name or not config.get(config.cleanup_cover_after_attach):
+            return
+
+        try:
+            safe_remove(self.get_cwd(), cover_file_name)
+
+        except Exception:
+            logger.warning("删除已嵌入封面文件失败：%s", cover_file_name, exc_info = True)
+            return
+
+        if cover_file_name in self.task_info.File.additional_files:
+            self.task_info.File.additional_files.remove(cover_file_name)
+
     def embed_cover_to_audio(self):
         cwd = self.get_cwd()
         cover_path = self.check_attach_cover(config.attach_cover_audio)
@@ -401,6 +428,7 @@ class Merger(QObject):
             self.rename_output_file()
             return
 
+        self._embedded_cover_file_name = cover_path
         self._cover_embed_source = self.temp_audio_file_name
         self._cover_embed_temp_output = f"cover_output_{self.task_info.Basic.task_id}.{self.task_info.File.audio_file_ext}"
         self._cover_embed_final = self.final_audio_file_name
@@ -435,6 +463,7 @@ class Merger(QObject):
 
             final_file_name = safe_rename(cwd, self._cover_embed_temp_output, self._cover_embed_final).name
 
+            self.cleanup_embedded_cover()
             self.add_file(final_file_name, clear = True)
             self.finish()
 

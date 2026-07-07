@@ -31,6 +31,20 @@ class FFmpegCommand:
             command.append(output_path)
 
         return command
+
+    @staticmethod
+    def _add_metadata(cmd, metadata: dict = None, output_path: str = ""):
+        if not metadata:
+            return cmd
+
+        for key, value in metadata.items():
+            cmd.add_param("-metadata", f"{key}={value}")
+
+        suffix = output_path.rsplit(".", 1)[-1].lower() if "." in output_path else ""
+        if "video_url" in metadata and suffix in {"mp4", "m4a", "mov", "m4v"}:
+            cmd.add_param("-movflags", "use_metadata_tags")
+
+        return cmd
     
     @classmethod
     def merge_video_audio(cls, video_path: str, audio_path: str, output_path: str, cover_path: str = None, metadata: dict = None):
@@ -58,10 +72,8 @@ class FFmpegCommand:
                 .add_param("-c:a", "copy")
             )
         
-        if metadata:
-            for key, value in metadata.items():
-                cmd.add_param("-metadata", f"{key}={value}")
-        
+        cls._add_metadata(cmd, metadata, output_path)
+
         return cmd.add_output(output_path)
     
     @classmethod
@@ -91,10 +103,8 @@ class FFmpegCommand:
                 .add_param("-c:a", "copy")
             )
         
-        if metadata:
-            for key, value in metadata.items():
-                cmd.add_param("-metadata", f"{key}={value}")
-        
+        cls._add_metadata(cmd, metadata, output_path)
+
         return cmd.add_output(output_path)
 
     @classmethod
@@ -120,10 +130,8 @@ class FFmpegCommand:
                 .add_param("-q:a", "2")
             )
         
-        if metadata:
-            for key, value in metadata.items():
-                cmd.add_param("-metadata", f"{key}={value}")
-        
+        cls._add_metadata(cmd, metadata, output_path)
+
         return cmd.add_output(output_path)
     
     @classmethod
@@ -150,8 +158,6 @@ class FFmpegCommand:
             .add_param("-pix_fmt:v:0", "yuvj420p")
         )
         
-        if metadata:
-            for key, value in metadata.items():
-                cmd.add_param("-metadata", f"{key}={value}")
-        
+        cls._add_metadata(cmd, metadata, output_path)
+
         return cmd.add_output(output_path)
