@@ -12,20 +12,32 @@ from ...common.signal_bus import signal_bus
 from ...network.request import SyncNetWorkRequest
 
 class ReparseWorker(QRunnable, ParserBase):
-    def __init__(self, episode_info: dict):
+    def __init__(self, episode_info: dict, options: dict = None):
         super().__init__()
 
         self.info_data: dict = None
         self.episode_info: dict = episode_info
         self.original_episode_data: dict = None
+        self.options = options
 
     def run(self):
         # 提取收藏夹/个人空间的 episode_data
-        self.original_episode_data = EpisodeData.get_episode_data(self.episode_info.get("episode_id"))
+        episode_id = self.episode_info.get("episode_id")
+        extra_data = self.episode_info.get("_episode_extra_data")
+
+        if episode_id and extra_data:
+            EpisodeData.table[episode_id] = extra_data
+
+        self.original_episode_data = EpisodeData.get_episode_data(episode_id)
         
         episode_node = self.parse_episode_node_info()
 
-        signal_bus.download.create_task.emit(episode_node.get_all_children(to_dict = True))
+        episode_list = episode_node.get_all_children(to_dict = True)
+
+        if self.options:
+            signal_bus.download.create_task_with_options.emit(episode_list, self.options)
+        else:
+            signal_bus.download.create_task.emit(episode_list)
 
     def parse_episode_node_info(self):
         # 视频

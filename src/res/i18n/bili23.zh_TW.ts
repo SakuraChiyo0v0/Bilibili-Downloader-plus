@@ -2130,6 +2130,11 @@ Bilibili 的影片通常將影片串流與音訊串流分開儲存與傳輸，�
         <translation>下載</translation>
     </message>
     <message>
+        <location filename="../../gui/interface/main_window.py" line="315"/>
+        <source>Sync</source>
+        <translation>同步</translation>
+    </message>
+    <message>
         <location filename="../../gui/interface/main_window.py" line="319"/>
         <source>Favorites</source>
         <translation>收藏</translation>
@@ -2969,6 +2974,11 @@ For example, if you set the video quality priority to 720P &gt; 1080P &gt; 4K, t
         <translation>下載所選項目</translation>
     </message>
     <message>
+        <location filename="../../gui/interface/parse.py" line="372"/>
+        <source>Download and Sync Updates</source>
+        <translation>下載並同步更新</translation>
+    </message>
+    <message>
         <location filename="../../gui/interface/parse.py" line="470"/>
         <source>Parse Failed</source>
         <translation>解析失敗</translation>
@@ -2977,6 +2987,21 @@ For example, if you set the video quality priority to 720P &gt; 1080P &gt; 4K, t
         <location filename="../../gui/interface/parse.py" line="499"/>
         <source>Added to download queue</source>
         <translation>已加入下載佇列</translation>
+    </message>
+    <message>
+        <location filename="../../gui/interface/parse.py" line="529"/>
+        <source>This source does not support sync downloads</source>
+        <translation>此來源不支援同步下載</translation>
+    </message>
+    <message>
+        <location filename="../../gui/interface/parse.py" line="545"/>
+        <source>Sync source enabled</source>
+        <translation>已啟用同步來源</translation>
+    </message>
+    <message>
+        <location filename="../../gui/interface/parse.py" line="530"/>
+        <source>Sync Failed</source>
+        <translation>同步失敗</translation>
     </message>
     <message>
         <location filename="../../gui/interface/parse.py" line="514"/>
@@ -4480,6 +4505,87 @@ Under no circumstances shall the developer be liable for any direct, indirect, i
         <location filename="../../util/common/translator.py" line="46"/>
         <source>360P</source>
         <translation>360P 流暢</translation>
+    </message>
+</context>
+<context>
+    <name>SyncInterface</name>
+    <message>
+        <location filename="../../gui/interface/sync.py" line="111"/>
+        <source>Sync</source>
+        <translation>同步</translation>
+    </message>
+    <message>
+        <location filename="../../gui/interface/sync.py" line="113"/>
+        <source>Check All</source>
+        <translation>全部檢查</translation>
+    </message>
+    <message>
+        <location filename="../../gui/interface/sync.py" line="121"/>
+        <source>No sync sources</source>
+        <translation>暫無同步來源</translation>
+    </message>
+</context>
+<context>
+    <name>SyncSourceItem</name>
+    <message>
+        <location filename="../../gui/interface/sync.py" line="31"/>
+        <source>Check now</source>
+        <translation>立即檢查</translation>
+    </message>
+    <message>
+        <location filename="../../gui/interface/sync.py" line="34"/>
+        <source>Edit download options</source>
+        <translation>編輯下載選項</translation>
+    </message>
+    <message>
+        <location filename="../../gui/interface/sync.py" line="37"/>
+        <source>Delete</source>
+        <translation>刪除</translation>
+    </message>
+    <message>
+        <location filename="../../gui/interface/sync.py" line="64"/>
+        <source>Sync Download Options</source>
+        <translation>同步下載選項</translation>
+    </message>
+    <message>
+        <location filename="../../gui/interface/sync.py" line="71"/>
+        <source>Sync download options updated</source>
+        <translation>同步下載選項已更新</translation>
+    </message>
+    <message>
+        <location filename="../../gui/interface/sync.py" line="70"/>
+        <source>Favorites</source>
+        <translation>收藏夾</translation>
+    </message>
+    <message>
+        <location filename="../../gui/interface/sync.py" line="71"/>
+        <source>Collection</source>
+        <translation>合集</translation>
+    </message>
+    <message>
+        <location filename="../../gui/interface/sync.py" line="72"/>
+        <source>Bangumi</source>
+        <translation>追番追劇</translation>
+    </message>
+    <message>
+        <location filename="../../gui/interface/sync.py" line="77"/>
+        <source>{source_type} | {item_count} known items</source>
+        <translation>{source_type} | 已記錄 {item_count} 項</translation>
+    </message>
+    <message>
+        <location filename="../../gui/interface/sync.py" line="85"/>
+        <source>Last check failed: {error}</source>
+        <translation>上次檢查失敗：{error}</translation>
+    </message>
+    <message>
+        <location filename="../../gui/interface/sync.py" line="90"/>
+        <source>Last checked: {time} | Added: {count}</source>
+        <translation>上次檢查：{time} | 新增：{count}</translation>
+    </message>
+    <message>
+        <location filename="../../gui/interface/sync.py" line="96"/>
+        <source>Not checked yet</source>
+        <translation>尚未檢查</translation>
     </message>
 </context>
 <context>

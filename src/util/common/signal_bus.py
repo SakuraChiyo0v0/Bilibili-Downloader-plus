@@ -35,6 +35,7 @@ class SignalBus:
 
     class Download(QObject):
         create_task = Signal(list)
+        create_task_with_options = Signal(list, object)
 
         show_duplicate_download_dialog = Signal(object, object, object)
         show_skip_duplicate_download_toast = Signal(str)
@@ -53,6 +54,13 @@ class SignalBus:
         update_downloading_item = Signal(object)
 
         start_next_task = Signal()
+
+    class Sync(QObject):
+        source_added = Signal(object)
+        source_updated = Signal(object)
+        source_removed = Signal(str)
+        check_source = Signal(str)
+        check_all = Signal()
 
     class Login(QObject):
         # 用于登录相关的信号
@@ -74,6 +82,7 @@ class SignalBus:
         self.toast = self.ToastNotification()
         self.parse = self.Parse()
         self.download = self.Download()
+        self.sync = self.Sync()
         self.login = self.Login()
         self.update = self.Update()
         self.interface = self.Interface()

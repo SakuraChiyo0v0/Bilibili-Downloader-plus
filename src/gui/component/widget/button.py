@@ -3,7 +3,7 @@ from PySide6.QtCore import Qt, QSize
 
 from qfluentwidgets import (
     PrimaryPushButton, IndeterminateProgressRing, ToolTipFilter, TransparentTogglePushButton, PrimarySplitPushButton,
-    SwitchButton, BodyLabel, HyperlinkLabel
+    SwitchButton, BodyLabel, HyperlinkLabel, setCustomStyleSheet
 )
 from qfluentwidgets import ToolButton as _ToolButton, TransparentToolButton as _TransparentToolButton
 
@@ -68,7 +68,22 @@ class IndeterminateProgressSplitPushButton(IndeterminateProgressBase, PrimarySpl
         self._text = text
 
         self.setText(text)
+        self._apply_split_disabled_style()
         self._init_spinner()
+
+    def _apply_split_disabled_style(self):
+        light_qss = """
+            #primarySplitPushButton:disabled {
+                border-right: 1px solid rgb(205, 205, 205);
+            }
+        """
+        dark_qss = """
+            #primarySplitPushButton:disabled {
+                border-right: 1px solid rgb(52, 52, 52);
+            }
+        """
+
+        setCustomStyleSheet(self.button, light_qss, dark_qss)
 
     def _center_spinner(self):
         dec_size = QSize(20, 20)
@@ -82,6 +97,17 @@ class IndeterminateProgressSplitPushButton(IndeterminateProgressBase, PrimarySpl
         super().resizeEvent(event)
 
         self._center_spinner()
+
+    def setEnabled(self, enabled: bool):
+        super().setEnabled(enabled)
+
+        self.button.setEnabled(enabled)
+        self.dropButton.setEnabled(enabled)
+
+        for widget in (self.button, self.dropButton):
+            widget.style().unpolish(widget)
+            widget.style().polish(widget)
+            widget.update()
 
 class ToolButton(_ToolButton):
     """

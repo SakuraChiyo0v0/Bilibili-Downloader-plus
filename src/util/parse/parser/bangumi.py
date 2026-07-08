@@ -35,7 +35,7 @@ class BangumiParser(ParserBase):
 
         return f"season_id={season_id}"
 
-    def parse(self, url: str, pn: int):
+    def parse(self, url: str, pn: int, get_info_data: bool = False):
         self.url = url
 
         match self.find_str(r"ep|ss|md", url):
@@ -49,6 +49,9 @@ class BangumiParser(ParserBase):
                 param = self.get_media_id()
 
         self.get_bangumi_info(param)
+
+        if get_info_data:
+            return self.info_data
 
         episode_parser = BangumiEpisodeParser(self.info_data.copy(), self.get_category_name())
         episode_parser.parse()

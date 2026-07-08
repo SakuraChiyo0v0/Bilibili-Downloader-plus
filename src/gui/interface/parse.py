@@ -25,6 +25,9 @@ from util.parse.preview.info import PreviewerInfo
 
 from util.misc.history import history_manager
 from util.thread.async_ import AsyncTask
+from util.sync.manager import sync_manager
+from util.sync.options import capture_download_options
+from util.sync.parser import detect_sync_source_type
 
 from collections import deque
 from threading import Event
@@ -313,6 +316,7 @@ class ParseInterface(ParseBase):
         self.main_window = parent
         self._triggered_by_clipboard = False
         self.download_options_dialog_opened = False
+        self.parser_category_name = ""
 
         self.setObjectName("ParseInterface")
 
@@ -360,9 +364,13 @@ class ParseInterface(ParseBase):
         self.progress_widget = ProgressTipWidget(self)
         self.progress_widget.hide()
 
-        self.download_btn = PrimaryPushButton(text = self.tr("Download Selected Items"), parent = self)
-        self.download_btn.setMinimumWidth(120)
+        self.download_btn = IndeterminateProgressSplitPushButton(self.tr("Download Selected Items"), self)
+        self.download_btn.button.setMinimumWidth(120)
         self.download_btn.setEnabled(False)
+
+        download_menu = RoundMenu(parent = self.download_btn)
+        download_menu.addAction(self._create_action(ExtendedFluentIcon.AUTOMATION, self.tr("Download and Sync Updates"), lambda: self.on_download(create_sync = True)))
+        self.download_btn.setFlyout(download_menu)
 
         top_layout = QHBoxLayout()
         top_layout.addWidget(self.url_box)
@@ -446,6 +454,7 @@ class ParseInterface(ParseBase):
 
     def on_parse_success(self, category_name: str, extra_data: dict):
         self.parse_list._model._set_category_name(category_name)
+        self.parser_category_name = category_name
         self.category_name = Translator.EPISODE_TYPE(category_name)
 
         self.update_previewer_info()
@@ -475,7 +484,7 @@ class ParseInterface(ParseBase):
         if config.get(config.parse_history):
             history_manager.add_history(title, self.url_box.text(), category_name)
 
-    def on_download(self):
+    def on_download(self, create_sync: bool = False):
         # 只有在获取媒体信息成功时才允许下载
         #self.download_btn.setIndeterminateState(True)
 
@@ -488,17 +497,71 @@ class ParseInterface(ParseBase):
             if not dialog.exec():
                 return
 
-        # 获取选中的下载项    
-        checked_episodes_list = self.parse_list.get_checked_items(to_dict = True, mark_as_downloaded = True)
+        options = capture_download_options()
+
+        # 获取选中的下载项
+        checked_episodes_list = self.parse_list.get_checked_items(to_dict = True)
+        all_episodes_list = self.parse_list.get_all_items(to_dict = True)
+
+        if not checked_episodes_list:
+            return
+
+        if create_sync:
+            try:
+                source_type = detect_sync_source_type(self.url_box.text(), self.parser_category_name, all_episodes_list)
+
+                if not source_type:
+                    signal_bus.toast.show.emit(
+                        ToastNotificationCategory.WARNING,
+                        "",
+                        self.tr("This source does not support sync downloads")
+                    )
+                    return
+
+                sync_manager.add_or_update_source(
+                    title = self._get_sync_source_title(),
+                    url = self.url_box.text(),
+                    source_type = source_type,
+                    episodes = all_episodes_list,
+                    options = options
+                )
+
+            except Exception as e:
+                logger.exception("Failed to create sync source")
+                signal_bus.toast.show.emit(
+                    ToastNotificationCategory.ERROR,
+                    self.tr("Sync Failed"),
+                    str(e)
+                )
+                return
 
         config.current_starting_number = 1
 
         # 添加到下载队列
-        signal_bus.download.create_task.emit(checked_episodes_list)
+        if create_sync:
+            signal_bus.download.create_task_with_options.emit(checked_episodes_list, options)
+        else:
+            signal_bus.download.create_task.emit(checked_episodes_list)
+
+        self.parse_list.get_checked_items(mark_as_downloaded = True)
 
         signal_bus.toast.show.emit(ToastNotificationCategory.SUCCESS, "", self.tr("Added to download queue"))
 
+        if create_sync:
+            signal_bus.toast.show.emit(ToastNotificationCategory.SUCCESS, "", self.tr("Sync source enabled"))
+
         QTimer.singleShot(0, self.parse_list.update_check_state)
+
+    def _get_sync_source_title(self):
+        try:
+            root = self.parse_list._model.root_node
+
+            if root.count() > 0:
+                return root.child(0).title
+        except Exception:
+            pass
+
+        return self.url_box.text()
 
     def on_download_options(self):
         # 只有在获取媒体信息成功时才显示下载选项对话框

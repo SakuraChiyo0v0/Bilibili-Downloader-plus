@@ -4,19 +4,29 @@ from ..config import config
 from threading import Lock
 from pathlib import Path
 import logging
+import time
 
 logger = logging.getLogger(__name__)
 
 _rename_lock = Lock()
 
-def safe_remove(cwd: str | Path, *file_names: str):
+
+def safe_remove(cwd: str | Path, *file_names: str, retries: int = 3, delay: float = 0.2):
     for file_name in file_names:
+        if not file_name:
+            continue
+
         path = Path(cwd, file_name)
-        try:
-            path.unlink(missing_ok=True)
-        except Exception as e:
-            logger.exception("删除文件 %s 时出错", path)
-            raise e
+        for attempt in range(retries + 1):
+            try:
+                path.unlink(missing_ok=True)
+                break
+            except Exception as e:
+                if attempt >= retries:
+                    logger.exception("删除文件 %s 时出错", path)
+                    raise e
+
+                time.sleep(delay)
 
 
 def safe_rename(cwd: str | Path, original_file_name: str, new_file_name: str) -> Path:
@@ -28,7 +38,7 @@ def safe_rename(cwd: str | Path, original_file_name: str, new_file_name: str) ->
 
     with _rename_lock:
         new_path = __resolve_conflict(original_path, new_path)
-        
+
         try:
             original_path.rename(new_path)
             return new_path
@@ -59,6 +69,7 @@ def __resolve_conflict(original_path: Path, new_path: Path) -> Path:
                     return new_target_path
                 n += 1
 
+
 class File:
     @staticmethod
     def preallocate_file(path: str, size: int):
@@ -69,5 +80,5 @@ class File:
     @staticmethod
     def create_placeholder(path: str):
         # 确保父目录存在，并创建一个空文件作为占位符
-        Path(path).parent.mkdir(parents = True, exist_ok = True)
-        Path(path).touch(exist_ok = True)
+        Path(path).parent.mkdir(parents=True, exist_ok=True)
+        Path(path).touch(exist_ok=True)

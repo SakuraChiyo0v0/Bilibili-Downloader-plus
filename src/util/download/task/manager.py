@@ -6,6 +6,7 @@ from ...common.translator import Translator
 from ...common.signal_bus import signal_bus
 from ...common.io.file import safe_remove
 from ...common.config import config, get_download_option_naming_rule_id
+from ...sync.options import get_option
 
 from ...parse.episode.tree import EpisodeData, Attribute
 from ...format.file_name import FileNameFormatter
@@ -31,11 +32,15 @@ class TaskManager:
         self.db_manager = TaskDatabase()
 
         signal_bus.download.create_task.connect(self._create_async)
+        signal_bus.download.create_task_with_options.connect(self._create_with_options_async)
 
     def _create_async(self, episode_info_list: List[dict]):
         GlobalThreadPoolTask.run_func(self.create, episode_info_list)
 
-    def __episode_info_to_task_info(self, episode_info: dict, number) -> TaskInfo:
+    def _create_with_options_async(self, episode_info_list: List[dict], options: dict):
+        GlobalThreadPoolTask.run_func(self.create_with_options, episode_info_list, options)
+
+    def __episode_info_to_task_info(self, episode_info: dict, number, options: dict = None) -> TaskInfo:
         task_info = TaskInfo()
 
         # BasicInfo
@@ -46,35 +51,51 @@ class TaskManager:
         
         # DownloadInfo
         task_info.Download.status = DownloadStatus.QUEUED
-        task_info.Download.type = self.__determine_download_type()
+        task_info.Download.type = self.__determine_download_type(options)
 
-        task_info.Download.video_quality_id = config.video_quality_id
-        task_info.Download.audio_quality_id = config.audio_quality_id
-        task_info.Download.video_codec_id = config.video_codec_id
-        task_info.Download.merge_video_audio = config.merge_video_audio
-        task_info.Download.keep_original_files = config.keep_original_files
+        task_info.Download.video_quality_id = get_option(options, "video_quality_id", config.video_quality_id)
+        task_info.Download.audio_quality_id = get_option(options, "audio_quality_id", config.audio_quality_id)
+        task_info.Download.video_codec_id = get_option(options, "video_codec_id", config.video_codec_id)
+        task_info.Download.merge_video_audio = get_option(options, "merge_video_audio", config.merge_video_audio)
+        task_info.Download.keep_original_files = get_option(options, "keep_original_files", config.keep_original_files)
+        task_info.Download.keep_original_files_type = get_option(options, "keep_original_files_type", config.keep_original_files_type)
+
+        task_info.Download.video_container = get_option(options, "video_container", config.get(config.video_container).value)
+        task_info.Download.m4a_to_mp3 = get_option(options, "m4a_to_mp3", config.get(config.m4a_to_mp3))
+        task_info.Download.cover_type = get_option(options, "cover_type", config.get(config.cover_type).value)
+        task_info.Download.attach_cover = get_option(options, "attach_cover", config.get(config.attach_cover))
+        task_info.Download.attach_cover_audio = get_option(options, "attach_cover_audio", config.get(config.attach_cover_audio))
+        task_info.Download.cleanup_cover_after_attach = get_option(options, "cleanup_cover_after_attach", config.get(config.cleanup_cover_after_attach))
+        task_info.Download.auto_tag = get_option(options, "auto_tag", config.get(config.auto_tag))
+        task_info.Download.write_video_url_tag = get_option(options, "write_video_url_tag", config.get(config.write_video_url_tag))
+        task_info.Download.danmaku_type = get_option(options, "danmaku_type", config.get(config.danmaku_type).value)
+        task_info.Download.danmaku_style = get_option(options, "danmaku_style", config.get(config.danmaku_style))
+        task_info.Download.subtitle_type = get_option(options, "subtitle_type", config.get(config.subtitle_type).value)
+        task_info.Download.subtitle_language = get_option(options, "subtitle_language", config.get(config.subtitle_language))
+        task_info.Download.subtitle_style = get_option(options, "subtitle_style", config.get(config.subtitle_style))
+        task_info.Download.metadata_type = get_option(options, "metadata_type", config.get(config.metadata_type).value)
 
         # EpisodeInfo
         task_info.Episode.from_dict(self.__update_episode_info(episode_info, number))
 
         # FileNameInfo
         # 下载目录在生成 TaskInfo 时就确定，后续即便修改了下载目录的设置，也不会影响已生成的 TaskInfo 中的下载目录，避免下载过程中下载目录发生变化导致的问题
-        task_info.File.download_path = config.get(config.download_path)
-        task_info.File.storage_type = config.get(config.storage_type).value
+        task_info.File.download_path = get_option(options, "download_path", config.get(config.download_path))
+        task_info.File.storage_type = get_option(options, "storage_type", config.get(config.storage_type).value)
 
-        self.__update_file_name_info(task_info)
+        self.__update_file_name_info(task_info, options)
 
         return task_info
 
-    def __determine_download_type(self):
+    def __determine_download_type(self, options: dict = None):
         # 确定下载类型
         attr_dict = {
-            DownloadType.VIDEO: config.download_video_stream,
-            DownloadType.AUDIO: config.download_audio_stream,
-            DownloadType.DANMAKU: config.get(config.download_danmaku),
-            DownloadType.SUBTITLE: config.get(config.download_subtitle),
-            DownloadType.COVER: config.get(config.download_cover),
-            DownloadType.METADATA: config.get(config.download_metadata)
+            DownloadType.VIDEO: get_option(options, "download_video_stream", config.download_video_stream),
+            DownloadType.AUDIO: get_option(options, "download_audio_stream", config.download_audio_stream),
+            DownloadType.DANMAKU: get_option(options, "download_danmaku", config.get(config.download_danmaku)),
+            DownloadType.SUBTITLE: get_option(options, "download_subtitle", config.get(config.download_subtitle)),
+            DownloadType.COVER: get_option(options, "download_cover", config.get(config.download_cover)),
+            DownloadType.METADATA: get_option(options, "download_metadata", config.get(config.download_metadata))
         }
 
         type = 0
@@ -86,7 +107,7 @@ class TaskManager:
         return type
 
     def __update_episode_info(self, episode_info: dict, number):
-        extra_data = EpisodeData.get_episode_data(episode_info.get("episode_id", ""))
+        extra_data = episode_info.get("_episode_extra_data") or EpisodeData.get_episode_data(episode_info.get("episode_id", ""))
 
         title = episode_info.get("title", "")
         attr = episode_info.get("attribute", 0)
@@ -115,11 +136,11 @@ class TaskManager:
 
         return data
 
-    def __update_file_name_info(self, task_info: TaskInfo):
+    def __update_file_name_info(self, task_info: TaskInfo, options: dict = None):
         formatter = FileNameFormatter()
         formatter.set_variable_data(task_info)
 
-        rule_id = config.target_naming_rule_id or get_download_option_naming_rule_id(formatter.type_id)
+        rule_id = self.__get_naming_rule_id(formatter.type_id, options)
 
         if rule_id is not None:
             formatter.set_rule(formatter.get_rule_by_id(rule_id))
@@ -129,9 +150,25 @@ class TaskManager:
         task_info.File.name = str(path.name)
         task_info.File.folder = str(path.parent)
 
-    def __check_reparse_needed(self, episode_info: dict):
+    def __get_naming_rule_id(self, type_id: int, options: dict = None):
+        if options:
+            rule_id = options.get("target_naming_rule_id")
+
+            if rule_id:
+                return rule_id
+
+            naming_rule_ids = options.get("naming_rule_ids")
+
+            if isinstance(naming_rule_ids, dict) and type_id is not None:
+                return naming_rule_ids.get(str(type_id))
+
+            return None
+
+        return config.target_naming_rule_id or get_download_option_naming_rule_id(type_id)
+
+    def __check_reparse_needed(self, episode_info: dict, options: dict = None):
         if episode_info.get("attribute", 0) & Attribute.NEED_PARSE_BIT:
-            worker = ReparseWorker(episode_info)
+            worker = ReparseWorker(episode_info, options)
             GlobalThreadPoolTask.run(worker)
 
             return True
@@ -157,43 +194,62 @@ class TaskManager:
                 # 过滤文件系统非法字符
                 episode_info[title] = re.sub(r'[\/\\\:\*\?\"\<\>\|]', '_', episode_info.get(title, ""))
 
-    def __get_number(self, episode_info: dict = None):
-        match config.get(config.numbering_type):
+    def __get_number(self, episode_info: dict = None, options: dict = None, number_state: dict = None):
+        numbering_type = self.__get_numbering_type(options)
+
+        match numbering_type:
             case NumberingType.CONTINUOUS:
-                # 全局顺序编号
-                return config.global_starting_number
+                current = number_state["global"]
+                number_state["global"] += 1
+
+                return current
             
             case NumberingType.FROM_SPECIFIED:
-                # 返回 current_starting_number，然后自增
-                _current = config.current_starting_number
-                config.current_starting_number += 1
+                current = number_state["current"]
+                number_state["current"] += 1
 
-                return _current
+                return current
             
             case _:
                 return episode_info.get("number", "")
 
-    def create(self, episode_info_list: List[dict]):
+    def __get_numbering_type(self, options: dict = None):
+        if options and "numbering_type" in options:
+            try:
+                return NumberingType(options["numbering_type"])
+            except ValueError:
+                return NumberingType.USE_PARSE_LIST
+
+        return config.get(config.numbering_type)
+
+    def create_with_options(self, episode_info_list: List[dict], options: dict):
+        return self.create(episode_info_list, options)
+
+    def create(self, episode_info_list: List[dict], options: dict = None):
         task_info_list = []
+        number_state = {
+            "current": get_option(options, "current_starting_number", config.current_starting_number or 1),
+            "global": get_option(options, "global_starting_number", config.global_starting_number),
+        }
 
         for episode_info in episode_info_list:
             # 判断是否需要重新解析
-            if self.__check_reparse_needed(episode_info):
+            if self.__check_reparse_needed(episode_info, options):
                 continue
 
             # 判断是否重复下载
-            if self._check_duplicate(episode_info):
+            if self._check_duplicate(episode_info, options):
                 continue
 
             # 先判断重复下载，再分配编号
-            number = self.__get_number(episode_info)
+            number = self.__get_number(episode_info, options, number_state)
 
-            task_info = self.__episode_info_to_task_info(episode_info, number)
+            task_info = self.__episode_info_to_task_info(episode_info, number, options)
 
             task_info_list.append(task_info)
 
-            # 全局起始编号自增
-            config.global_starting_number += 1
+            if not options and self.__get_numbering_type() == NumberingType.CONTINUOUS:
+                config.global_starting_number = number_state["global"]
 
         if task_info_list:
             # 存储到数据库，并添加到下载列表
@@ -201,6 +257,8 @@ class TaskManager:
 
             signal_bus.download.add_to_downloading_list.emit(task_info_list)
             signal_bus.download.auto_manage_concurrent_downloads.emit()
+
+        return task_info_list
 
     def query(self, completed: bool = False) -> List[TaskInfo]:
         result = self.db_manager.query_tasks(completed)
@@ -278,12 +336,17 @@ class TaskManager:
 
         self.__update_file_name_info(task_info)
 
-    def _check_duplicate(self, episode_info: dict):
+    def _check_duplicate(self, episode_info: dict, options: dict = None):
         hash_id = self._calc_hash_id(episode_info)
 
         result = self.db_manager.check_duplicate(hash_id)
 
         if result:
+            if options and options.get("skip_duplicate_prompt"):
+                logger.info("已跳过同步中的重复下载任务: %s", episode_info.get("title", ""))
+
+                return True
+
             # 触发重复下载，根据用户设置执行相应的操作
             match config.get(config.duplicate_download_resolution):
                 case DuplicateDownloadResolution.CONTINUE:

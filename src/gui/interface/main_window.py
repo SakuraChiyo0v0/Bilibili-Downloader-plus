@@ -313,6 +313,14 @@ class MainWindow(MainWindowBase, MSFluentWindow):
         self.download_info_badge = InfoBadge.error("99+", parent = self, target = self.download_btn)
         self.download_info_badge.hide()
 
+        self.sync_btn = self.navigationInterface.addItem(
+            "SyncInterface",
+            ExtendedFluentIcon.AUTOMATION,
+            self.tr("Sync"),
+            selectable = True,
+            position = NavigationItemPosition.TOP
+        )
+
         self.favorite_btn = self.navigationInterface.addItem(
             "favorite",
             ExtendedFluentIcon.FAVORITE,
@@ -360,12 +368,15 @@ class MainWindow(MainWindowBase, MSFluentWindow):
         from qfluentwidgets import Flyout
 
         from .download import DownloadInterface
+        from .sync import SyncInterface
         from .setting import SettingInterface
 
         self.download_interface = DownloadInterface(self)
+        self.sync_interface = SyncInterface(self)
         self.setting_interface = SettingInterface(self)
 
         self._addSubInterface(self.download_interface)
+        self._addSubInterface(self.sync_interface)
         self._addSubInterface(self.setting_interface)
 
         self.system_tray_icon = SystemTrayIcon(self)
@@ -397,6 +408,7 @@ class MainWindow(MainWindowBase, MSFluentWindow):
 
         self.parse_btn.clicked.connect(lambda: self.update_route_key("ParseInterface"))
         self.download_btn.clicked.connect(lambda: self.update_route_key("DownloadInterface"))
+        self.sync_btn.clicked.connect(lambda: self.update_route_key("SyncInterface"))
         self.setting_btn.clicked.connect(lambda: self.update_route_key("SettingInterface"))
 
     def init_utils(self):
@@ -413,6 +425,10 @@ class MainWindow(MainWindowBase, MSFluentWindow):
         self.updater = Updater(self)
 
         signal_bus.update.check.connect(self.updater.request_update)
+
+        from util.sync.manager import sync_manager
+
+        sync_manager.start()
 
         # 初始化完成，恢复鼠标指针
         QApplication.restoreOverrideCursor()

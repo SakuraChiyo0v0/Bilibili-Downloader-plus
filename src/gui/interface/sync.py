@@ -1,0 +1,170 @@
+from datetime import datetime
+
+from PySide6.QtCore import QSize
+from PySide6.QtWidgets import QFrame, QHBoxLayout, QListWidgetItem, QVBoxLayout, QWidget
+
+from qfluentwidgets import BodyLabel, FluentIcon, ListWidget, PrimaryPushButton, SwitchButton, TitleLabel
+
+from gui.component.widget import ToolButton
+
+from util.common.enum import ToastNotificationCategory
+from util.common.icon import ExtendedFluentIcon
+from util.common.signal_bus import signal_bus
+from util.sync.info import SyncSourceInfo
+from util.sync.manager import sync_manager
+from util.sync.options import capture_download_options, scoped_download_options
+
+
+class SyncSourceItem(QWidget):
+    def __init__(self, source: SyncSourceInfo, parent = None):
+        super().__init__(parent)
+
+        self.source = source
+
+        self.init_UI()
+
+    def init_UI(self):
+        self.title_label = BodyLabel(self.source.title or self.source.url, self)
+        self.meta_label = BodyLabel(self._meta_text(), self)
+        self.status_label = BodyLabel(self._status_text(), self)
+
+        self.enabled_switch = SwitchButton(self)
+        self.enabled_switch.setChecked(self.source.enabled)
+
+        self.check_btn = ToolButton(ExtendedFluentIcon.RETRY, self)
+        self.check_btn.setToolTip(self.tr("Check now"))
+
+        self.options_btn = ToolButton(FluentIcon.SETTING, self)
+        self.options_btn.setToolTip(self.tr("Edit download options"))
+
+        self.delete_btn = ToolButton(FluentIcon.DELETE, self)
+        self.delete_btn.setToolTip(self.tr("Delete"))
+
+        text_layout = QVBoxLayout()
+        text_layout.setContentsMargins(0, 0, 0, 0)
+        text_layout.addWidget(self.title_label)
+        text_layout.addWidget(self.meta_label)
+        text_layout.addWidget(self.status_label)
+
+        action_layout = QHBoxLayout()
+        action_layout.setContentsMargins(0, 0, 0, 0)
+        action_layout.addWidget(self.enabled_switch)
+        action_layout.addWidget(self.check_btn)
+        action_layout.addWidget(self.options_btn)
+        action_layout.addWidget(self.delete_btn)
+
+        main_layout = QHBoxLayout(self)
+        main_layout.setContentsMargins(12, 8, 12, 8)
+        main_layout.addLayout(text_layout)
+        main_layout.addStretch()
+        main_layout.addLayout(action_layout)
+
+        self.enabled_switch.checkedChanged.connect(lambda checked: sync_manager.set_enabled(self.source.sync_id, checked))
+        self.check_btn.clicked.connect(lambda: signal_bus.sync.check_source.emit(self.source.sync_id))
+        self.options_btn.clicked.connect(self.on_edit_options)
+        self.delete_btn.clicked.connect(lambda: sync_manager.delete_source(self.source.sync_id))
+
+    def on_edit_options(self):
+        from gui.dialog.download_options.dialog import DownloadOptionsDialog
+
+        main_window = self.window()
+        new_options = None
+
+        with scoped_download_options(self.source.options):
+            dialog = DownloadOptionsDialog(main_window)
+            dialog.setWindowTitle(self.tr("Sync Download Options"))
+
+            if not dialog.exec():
+                return
+
+            new_options = capture_download_options()
+
+        sync_manager.update_source_options(self.source.sync_id, new_options)
+
+        signal_bus.toast.show.emit(
+            ToastNotificationCategory.SUCCESS,
+            "",
+            self.tr("Sync download options updated")
+        )
+
+    def _meta_text(self):
+        source_type_map = {
+            "favlist": self.tr("Favorites"),
+            "collection": self.tr("Collection"),
+            "bangumi": self.tr("Bangumi"),
+        }
+
+        item_count = len(self.source.known_item_ids)
+
+        return self.tr("{source_type} | {item_count} known items").format(
+            source_type = source_type_map.get(self.source.source_type, self.source.source_type),
+            item_count = item_count
+        )
+
+    def _status_text(self):
+        if self.source.last_error:
+            return self.tr("Last check failed: {error}").format(error = self.source.last_error)
+
+        if self.source.last_success_time:
+            time_text = datetime.fromtimestamp(self.source.last_success_time / 1000).strftime("%Y-%m-%d %H:%M")
+
+            return self.tr("Last checked: {time} | Added: {count}").format(
+                time = time_text,
+                count = self.source.last_added_count
+            )
+
+        return self.tr("Not checked yet")
+
+
+class SyncInterface(QFrame):
+    def __init__(self, parent = None):
+        super().__init__(parent = parent)
+
+        self.setObjectName("SyncInterface")
+
+        self.init_UI()
+        self.refresh_sources()
+
+    def init_UI(self):
+        self.title_label = TitleLabel(self.tr("Sync"), self)
+
+        self.check_all_btn = PrimaryPushButton(ExtendedFluentIcon.RETRY, self.tr("Check All"), self)
+
+        self.list_widget = ListWidget(self)
+        self.list_widget.setSpacing(6)
+
+        self.empty_label = BodyLabel(self.tr("No sync sources"), self)
+        self.empty_label.setVisible(False)
+
+        top_layout = QHBoxLayout()
+        top_layout.addWidget(self.title_label)
+        top_layout.addStretch()
+        top_layout.addWidget(self.check_all_btn)
+
+        main_layout = QVBoxLayout(self)
+        main_layout.setContentsMargins(25, 15, 25, 15)
+        main_layout.addLayout(top_layout)
+        main_layout.addWidget(self.empty_label)
+        main_layout.addWidget(self.list_widget)
+
+        self.connect_signals()
+
+    def connect_signals(self):
+        self.check_all_btn.clicked.connect(lambda: signal_bus.sync.check_all.emit())
+        signal_bus.sync.source_added.connect(lambda _: self.refresh_sources())
+        signal_bus.sync.source_updated.connect(lambda _: self.refresh_sources())
+        signal_bus.sync.source_removed.connect(lambda _: self.refresh_sources())
+
+    def refresh_sources(self):
+        self.list_widget.clear()
+
+        sources = sync_manager.sources()
+        self.empty_label.setVisible(len(sources) == 0)
+        self.list_widget.setVisible(len(sources) > 0)
+
+        for source in sources:
+            item = QListWidgetItem()
+            widget = SyncSourceItem(source, self.list_widget)
+            item.setSizeHint(QSize(100, 86))
+            self.list_widget.addItem(item)
+            self.list_widget.setItemWidget(item, widget)

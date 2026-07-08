@@ -68,9 +68,10 @@ class StaticTrack:
 
 
 class DanmakuLayoutEngine:
-    def __init__(self, screen_width: int, screen_height: int):
+    def __init__(self, screen_width: int, screen_height: int, style: dict = None):
         self.screen_width = screen_width
         self.screen_height = screen_height
+        self.style = style
         
         self._load_config()
 
@@ -80,7 +81,7 @@ class DanmakuLayoutEngine:
         self.bottom_tracks = [StaticTrack() for _ in range(self.max_static_rows)]
 
     def _load_config(self):
-        style = config.get(config.danmaku_style)
+        style = self.style or config.get(config.danmaku_style)
         
         font = QApplication.font()
 
@@ -133,10 +134,11 @@ class DanmakuLayoutEngine:
 
 
 class DanmakuASS:
-    def __init__(self, dict_list: List[dict], title: str):
+    def __init__(self, dict_list: List[dict], title: str, style: dict = None):
         # 弹幕按出现时间排序
         self.dict_list = sorted(dict_list, key=lambda x: x.get("stime", 0))
         self.title = title
+        self.style = style
         
         # 各模式的显示时长 (毫秒)
         self.duration_map = {
@@ -148,7 +150,7 @@ class DanmakuASS:
     def generate(self) -> str:
         style_str, screen_width, screen_height = self._get_style_info()
         
-        engine = DanmakuLayoutEngine(screen_width, screen_height)
+        engine = DanmakuLayoutEngine(screen_width, screen_height, self.style)
         dialogues = self._convert_dialogues(engine)
         
         return ass_base.format(
@@ -160,7 +162,7 @@ class DanmakuASS:
         )
         
     def _get_style_info(self) -> Tuple[str, int, int]:
-        style = config.get(config.danmaku_style)
+        style = self.style or config.get(config.danmaku_style)
         
         screen_width = style["resolution"]["width"]
         screen_height = style["resolution"]["height"]

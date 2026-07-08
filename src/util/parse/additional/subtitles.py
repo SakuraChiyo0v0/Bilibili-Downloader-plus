@@ -2,6 +2,7 @@ from ...common.translator import Translator
 from ...common.enum import SubtitleType
 from ...common.config import config
 from ...common._json import json_dumps
+from ...sync.options import get_task_option
 
 from ...network.request import SyncNetWorkRequest
 from ...download.task.info import TaskInfo
@@ -21,7 +22,7 @@ class SubtitlesParser(AdditionalParserBase):
             language = entry["language"]
             data = entry["data"]
 
-            match config.get(config.subtitle_type):
+            match self._subtitle_type():
                 case SubtitleType.SRT:
                     contents, suffix = self._to_srt(data)
 
@@ -77,7 +78,8 @@ class SubtitlesParser(AdditionalParserBase):
         return "\n".join(txt_lines).strip(), "txt"
 
     def _to_ass(self, data: dict):
-        ass = SubtitlesASS(data, self.task_info.Basic.show_title).generate()
+        style = get_task_option(self.task_info, "subtitle_style", config.get(config.subtitle_style))
+        ass = SubtitlesASS(data, self.task_info.Basic.show_title, style = style).generate()
 
         return ass, "ass"
 
@@ -88,7 +90,7 @@ class SubtitlesParser(AdditionalParserBase):
         subtitles_data_list = []
 
         subtitles_url_list = self._get_subtitles_url_list()
-        language_config = config.get(config.subtitle_language)
+        language_config = get_task_option(self.task_info, "subtitle_language", config.get(config.subtitle_language))
 
         for entry in subtitles_url_list:
             language = entry["lan"]
@@ -124,11 +126,18 @@ class SubtitlesParser(AdditionalParserBase):
             "dm_cover_img_str": "QU5HTEUgKE5WSURJQSwgTlZJRElBIEdlRm9yY2UgUlRYIDQwNjAgTGFwdG9wIEdQVSAoMHgwMDAwMjhFMCkgRGlyZWN0M0QxMSB2c181XzAgcHNfNV8wLCBEM0QxMSlHb29nbGUgSW5jLiAoTlZJRElBKQ",
             "dm_img_inter": '{"ds":[],"wh":[5231,6067,75],"of":[475,950,475]}',
         }
-        
+
         url = f"https://api.bilibili.com/x/player/wbi/v2?{self.enc_wbi(params)}"
 
         request = SyncNetWorkRequest(url)
         response = request.run()
 
         return response["data"]["subtitle"]["subtitles"]
-    
+
+    def _subtitle_type(self):
+        value = get_task_option(self.task_info, "subtitle_type", config.get(config.subtitle_type))
+
+        if isinstance(value, SubtitleType):
+            return value
+
+        return SubtitleType(value)

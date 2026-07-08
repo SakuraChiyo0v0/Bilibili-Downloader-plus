@@ -24,9 +24,10 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 """
 
 class SubtitlesASS:
-    def __init__(self, data: dict, title: str):
+    def __init__(self, data: dict, title: str, style: dict = None):
         self.data = data
         self.title = title
+        self.style = style
 
     def generate(self):
         style_str, screen_width, screen_height = self._get_style_info()
@@ -42,7 +43,7 @@ class SubtitlesASS:
         )
     
     def _get_style_info(self):
-        style = config.get(config.subtitle_style)
+        style = self.style or config.get(config.subtitle_style)
         
         screen_width = style["resolution"]["width"]
         screen_height = style["resolution"]["height"]
@@ -68,7 +69,7 @@ class SubtitlesASS:
         )
 
         return style_str, screen_width, screen_height
-    
+
     def _convert_dialogues(self):
         dialogues_list = []
 
@@ -80,4 +81,3 @@ class SubtitlesASS:
             dialogues_list.append(f"Dialogue: 0,{start},{end},Default,,0,0,0,,{content}")
 
         return dialogues_list
-    

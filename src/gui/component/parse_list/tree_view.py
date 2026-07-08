@@ -60,8 +60,8 @@ class ParseTreeView(TreeView):
         
         self.update_tree(invisible_root)
 
-    def get_all_items(self):
-        return self._model.root_node.get_all_children()
+    def get_all_items(self, to_dict = False):
+        return self._model.root_node.get_all_children(to_dict = to_dict)
     
     def get_checked_items(self, to_dict = False, mark_as_downloaded = False):
         return self._model.root_node.get_all_checked_children(to_dict = to_dict, mark_as_downloaded = mark_as_downloaded)

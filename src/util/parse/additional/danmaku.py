@@ -4,6 +4,7 @@ from ...common.translator import Translator
 from ...common._json import json_dumps
 from ...common.enum import DanmakuType
 from ...common.config import config
+from ...sync.options import get_task_option
 
 from .base import AdditionalParserBase
 from .file.danmaku_ass import DanmakuASS
@@ -21,7 +22,7 @@ class DanmakuParser(AdditionalParserBase):
     def parse(self):
         dict_list = self._get_all_protobuf_parts()
 
-        match config.get(config.danmaku_type):
+        match self._danmaku_type():
             case DanmakuType.XML:
                 contents, suffix = self._to_xml(dict_list)
 
@@ -39,7 +40,8 @@ class DanmakuParser(AdditionalParserBase):
         return xml, "xml"
 
     def _to_ass(self, dict_list: List[dict]) -> tuple:
-        ass = DanmakuASS(dict_list, self.task_info.Basic.show_title).generate()
+        style = get_task_option(self.task_info, "danmaku_style", config.get(config.danmaku_style))
+        ass = DanmakuASS(dict_list, self.task_info.Basic.show_title, style = style).generate()
 
         return ass, "ass"
 
@@ -90,3 +92,11 @@ class DanmakuParser(AdditionalParserBase):
             dict_list.extend([entry for entry in temp_entry if entry.get("stime") and entry.get("text")])
 
         return dict_list
+
+    def _danmaku_type(self):
+        value = get_task_option(self.task_info, "danmaku_type", config.get(config.danmaku_type))
+
+        if isinstance(value, DanmakuType):
+            return value
+
+        return DanmakuType(value)

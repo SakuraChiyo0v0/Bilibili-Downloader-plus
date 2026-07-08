@@ -64,4 +64,5 @@ class DownloadOptionsDialog(TopNavigationDialogBase):
         self.set_open_state(False)
 
     def set_open_state(self, open: bool):
-        self.main_window.parse_interface.download_options_dialog_opened = open
+        if self.main_window and hasattr(self.main_window, "parse_interface"):
+            self.main_window.parse_interface.download_options_dialog_opened = open

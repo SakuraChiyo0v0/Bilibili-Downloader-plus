@@ -1,6 +1,7 @@
 from ...network.request import SyncNetWorkRequest, ResponseType
 from ...download.task.info import TaskInfo
 from ...common.config import config
+from ...sync.options import get_task_option
 
 from .base import AdditionalParserBase
 
@@ -11,7 +12,7 @@ class CoverParser(AdditionalParserBase):
         super().__init__(task_info)
 
     def parse(self):
-        suffix = config.get(config.cover_type).value
+        suffix = get_task_option(self.task_info, "cover_type", config.get(config.cover_type).value)
 
         for i in range(3):
             try:

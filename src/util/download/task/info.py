@@ -122,6 +122,23 @@ class DownloadInfo(InfoBase):
     # 合并相关
     merge_video_audio: bool = False
     keep_original_files: bool = False
+    keep_original_files_type: int = -1
+
+    # 任务级下载设置快照
+    video_container: str = ""
+    m4a_to_mp3: int = -1
+    cover_type: str = ""
+    attach_cover: int = -1
+    attach_cover_audio: int = -1
+    cleanup_cover_after_attach: int = -1
+    auto_tag: int = -1
+    write_video_url_tag: int = -1
+    danmaku_type: str = ""
+    danmaku_style: dict = field(default_factory = dict)
+    subtitle_type: str = ""
+    subtitle_language: dict = field(default_factory = dict)
+    subtitle_style: dict = field(default_factory = dict)
+    metadata_type: str = ""
 
     video_parts_count: int = 0
 
