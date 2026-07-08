@@ -5,7 +5,7 @@ from ...common.timestamp import get_timestamp_ms
 from ...common.translator import Translator
 from ...common.signal_bus import signal_bus
 from ...common.io.file import safe_remove
-from ...common.config import config
+from ...common.config import config, get_download_option_naming_rule_id
 
 from ...parse.episode.tree import EpisodeData, Attribute
 from ...format.file_name import FileNameFormatter
@@ -119,8 +119,10 @@ class TaskManager:
         formatter = FileNameFormatter()
         formatter.set_variable_data(task_info)
 
-        if config.target_naming_rule_id is not None:
-            formatter.set_rule(formatter.get_rule_by_id(config.target_naming_rule_id))
+        rule_id = config.target_naming_rule_id or get_download_option_naming_rule_id(formatter.type_id)
+
+        if rule_id is not None:
+            formatter.set_rule(formatter.get_rule_by_id(rule_id))
 
         path = Path(formatter.format())
 

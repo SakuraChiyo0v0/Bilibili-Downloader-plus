@@ -81,6 +81,15 @@ class MediaSettingsPage(ScrollArea):
 
         config.keep_original_files_type = self.media_options_card.original_files_type_choice.currentIndex()
 
+        config.set(config.download_option_video_quality_id, config.video_quality_id)
+        config.set(config.download_option_audio_quality_id, config.audio_quality_id)
+        config.set(config.download_option_video_codec_id, config.video_codec_id)
+        config.set(config.download_option_video_stream, config.download_video_stream)
+        config.set(config.download_option_audio_stream, config.download_audio_stream)
+        config.set(config.download_option_merge_video_audio, config.merge_video_audio)
+        config.set(config.download_option_keep_original_files, config.keep_original_files)
+        config.set(config.download_option_keep_original_files_type, config.keep_original_files_type)
+
     def on_check(self):
         # 只下载独立视频流会导致没有声音，提示用户确认
         download_video = self.media_options_card.download_video_stream

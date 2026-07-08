@@ -14,7 +14,7 @@ from util.common.data import (
 from util.common.icon import ExtendedFluentIcon
 from util.common.translator import Translator
 from util.common.enum import MediaType
-from util.common.config import config
+from util.common.config import config, get_download_option_naming_rule_id
 
 from util.parse.preview.info import PreviewerInfo
 from util.format.file_name import FileNameFormatter
@@ -271,6 +271,7 @@ class NamingConventionCard(SettingCard):
         super().__init__(FluentIcon.DOCUMENT, self.tr("Naming Convention"), self.tr("Choose the naming rule to use when downloading"), parent)
 
         self.rule_choice = ComboBox(parent = self)
+        self.type_id = None
 
         self.rule_group = self.hBoxLayout.addWidget(self.rule_choice, 0, Qt.AlignmentFlag.AlignRight)
 
@@ -281,22 +282,36 @@ class NamingConventionCard(SettingCard):
     def init_default_rules(self):
         # 查询可用的命名规则列表
         file_name_formatter = FileNameFormatter()
+        self.type_id = file_name_formatter.get_type_id_from_attribute(PreviewerInfo.attribute)
         rule_list = file_name_formatter.get_rule_list_from_attribute(PreviewerInfo.attribute)
+        saved_rule_id = get_download_option_naming_rule_id(self.type_id)
+        default_index = None
+        saved_index = None
 
         # 如果能查询到数据，则说明是支持自定义命名规则的类型，直接显示
         if rule_list:
             for entry in rule_list:
                 name_key = entry["name"]
                 default_rule_names = Translator.DEFAULT_RULE_NAMES()
+                display_name = entry["name"]
 
                 if name_key in default_rule_names:
-                    entry["name"] = Translator.DEFAULT_RULE_NAMES(name_key)
+                    display_name = Translator.DEFAULT_RULE_NAMES(name_key)
 
-                self.rule_choice.addItem(entry["name"], userData = entry["id"])
+                self.rule_choice.addItem(display_name, userData = entry["id"])
 
-                # 如果是默认规则，直接选中
+                current_index = self.rule_choice.count() - 1
+
                 if entry["default"]:
-                    self.rule_choice.setCurrentText(entry["name"])
+                    default_index = current_index
+
+                if entry["id"] == saved_rule_id:
+                    saved_index = current_index
+
+            target_index = saved_index if saved_index is not None else default_index
+
+            if target_index is not None:
+                self.rule_choice.setCurrentIndex(target_index)
 
         # 如果查询不到数据，则说明是该类型不支持自定义命名规则，禁用选择框
         else:

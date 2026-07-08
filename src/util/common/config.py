@@ -292,7 +292,7 @@ class APPConfig(QConfig):
     app_name = "Bili23 Downloader"
     app_version = "2.10.4"
     app_comparable_version = "2.10.4"
-    app_config_version = 2103
+    app_config_version = 2104
     config_version = ConfigItem("Application", "config_version", app_config_version)
 
     # Interface
@@ -334,6 +334,17 @@ class APPConfig(QConfig):
 
     video_container = OptionsConfigItem("Download", "video_container", VideoContainer.MP4, OptionsValidator(VideoContainer), EnumSerializer(VideoContainer))
     m4a_to_mp3 = ConfigItem("Download", "m4a_to_mp3", False)
+
+    # Download Options
+    download_option_video_quality_id = ConfigItem("Download Options", "video_quality_id", 200)
+    download_option_audio_quality_id = ConfigItem("Download Options", "audio_quality_id", 30300)
+    download_option_video_codec_id = ConfigItem("Download Options", "video_codec_id", 20)
+    download_option_video_stream = ConfigItem("Download Options", "download_video_stream", True, BoolValidator())
+    download_option_audio_stream = ConfigItem("Download Options", "download_audio_stream", True, BoolValidator())
+    download_option_merge_video_audio = ConfigItem("Download Options", "merge_video_audio", True, BoolValidator())
+    download_option_keep_original_files = ConfigItem("Download Options", "keep_original_files", False, BoolValidator())
+    download_option_keep_original_files_type = RangeConfigItem("Download Options", "keep_original_files_type", 0, RangeValidator(0, 2))
+    download_option_naming_rule_ids = ConfigItem("Download Options", "naming_rule_ids", {})
 
     # Additional
     download_danmaku = ConfigItem("Additional", "download_danmaku", False, BoolValidator())
@@ -598,6 +609,40 @@ def patch_conditional_hyphen_naming_rules():
     if changed:
         config.set(config.naming_rule_list, rule_list)
 
+def load_download_option_runtime_values():
+    config.video_quality_id = config.get(config.download_option_video_quality_id)
+    config.audio_quality_id = config.get(config.download_option_audio_quality_id)
+    config.video_codec_id = config.get(config.download_option_video_codec_id)
+
+    config.download_video_stream = config.get(config.download_option_video_stream)
+    config.download_audio_stream = config.get(config.download_option_audio_stream)
+    config.merge_video_audio = config.get(config.download_option_merge_video_audio)
+    config.keep_original_files = config.get(config.download_option_keep_original_files)
+    config.keep_original_files_type = config.get(config.download_option_keep_original_files_type)
+
+def get_download_option_naming_rule_id(type_id: int):
+    naming_rule_ids = config.get(config.download_option_naming_rule_ids)
+
+    if not isinstance(naming_rule_ids, dict) or type_id is None:
+        return None
+
+    return naming_rule_ids.get(str(type_id))
+
+def set_download_option_naming_rule_id(type_id: int, rule_id: str):
+    if type_id is None or not rule_id:
+        return
+
+    naming_rule_ids = config.get(config.download_option_naming_rule_ids)
+
+    if not isinstance(naming_rule_ids, dict):
+        naming_rule_ids = {}
+    else:
+        naming_rule_ids = naming_rule_ids.copy()
+
+    naming_rule_ids[str(type_id)] = rule_id
+
+    config.set(config.download_option_naming_rule_ids, naming_rule_ids)
+
 config = APPConfig()
 config.themeMode.value = Theme.AUTO
 
@@ -618,3 +663,5 @@ if need_patch:
     config.should_upgrade_config = True
 
     patch_config(config_version)
+
+load_download_option_runtime_values()

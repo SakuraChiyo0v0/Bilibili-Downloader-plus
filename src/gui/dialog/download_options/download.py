@@ -8,7 +8,7 @@ from gui.component.widget import ScrollArea
 from .card import NamingConventionCard
 
 from util.common.icon import ExtendedFluentIcon
-from util.common.config import config
+from util.common.config import config, set_download_option_naming_rule_id
 from util.common.enum import StorageType
 from util.common.io.directory import Directory
 from util.thread.pool import GlobalThreadPoolTask
@@ -132,3 +132,8 @@ class DownloadSettingsPage(ScrollArea):
     def on_save(self):
         config.set(config.download_path, self.download_path_card.path)
         config.target_naming_rule_id = self.naming_convention_card.rule_choice.currentData()
+
+        set_download_option_naming_rule_id(
+            self.naming_convention_card.type_id,
+            config.target_naming_rule_id
+        )

@@ -12,6 +12,7 @@ from util.common.translator import Translator
 from util.common.icon import ExtendedFluentIcon
 
 from uuid import uuid4
+from copy import deepcopy
 import webbrowser
 
 class RuleListDialog(DialogBase):
@@ -22,7 +23,7 @@ class RuleListDialog(DialogBase):
 
         self.main_window = parent
 
-        self.rule_data_list = config.get(config.naming_rule_list).copy()
+        self.rule_data_list = deepcopy(config.get(config.naming_rule_list))
 
         self.init_rule_list()
 
@@ -68,12 +69,13 @@ class RuleListDialog(DialogBase):
             type_key = reversed_convention_type_map.get(entry.get("type"))
 
             default_rule_names = Translator.DEFAULT_RULE_NAMES()
+            display_name = entry.get("name")
 
             if name_key in default_rule_names:
-                entry["name"] = Translator.DEFAULT_RULE_NAMES(name_key)
+                display_name = Translator.DEFAULT_RULE_NAMES(name_key)
 
             self._add_row(
-                entry.get("name"),
+                display_name,
                 Translator.CONVENTION_TYPE(type_key),
                 index,
                 userData = entry.copy()
@@ -155,7 +157,7 @@ class RuleListDialog(DialogBase):
         self.rule_data_list.pop(index)
 
     def on_reset_to_default(self):
-        self.rule_data_list = DefaultValue.naming_rule_list.copy()
+        self.rule_data_list = deepcopy(DefaultValue.naming_rule_list)
 
         self.init_rule_list()
 
