@@ -1,10 +1,12 @@
+from copy import deepcopy
 from datetime import datetime
 
-from PySide6.QtCore import QSize
+from PySide6.QtCore import QSize, Signal, Slot
 from PySide6.QtWidgets import QFrame, QHBoxLayout, QListWidgetItem, QVBoxLayout, QWidget
 
-from qfluentwidgets import BodyLabel, FluentIcon, ListWidget, PrimaryPushButton, SwitchButton, TitleLabel
+from qfluentwidgets import BodyLabel, FluentIcon, LineEdit, ListWidget, PrimaryPushButton, PushButton, SubtitleLabel, SwitchButton, TitleLabel
 
+from gui.component.dialog import DialogBase
 from gui.component.widget import ToolButton
 
 from util.common.enum import ToastNotificationCategory
@@ -13,6 +15,111 @@ from util.common.signal_bus import signal_bus
 from util.sync.info import SyncSourceInfo
 from util.sync.manager import sync_manager
 from util.sync.options import capture_download_options, scoped_download_options
+from util.sync.parser import SyncSourceParser
+from util.thread.async_ import AsyncTask
+from util.thread.worker_base import WorkerBase
+
+
+class ManualSyncAddWorker(WorkerBase):
+    success = Signal(object, int)
+    error = Signal(str)
+
+    def __init__(self, url: str, options: dict, parent = None):
+        super().__init__(parent)
+
+        self.url = url
+        self.options = deepcopy(options)
+
+    @Slot()
+    def run(self):
+        try:
+            parsed = SyncSourceParser().parse(self.url)
+            episodes = parsed.get("episodes", [])
+            source = sync_manager.add_or_update_source(
+                title = parsed.get("title", ""),
+                url = self.url,
+                source_type = parsed.get("source_type", ""),
+                episodes = episodes,
+                options = self.options
+            )
+
+            self.success.emit(source, len(episodes))
+
+        except Exception as e:
+            self.error.emit(str(e))
+
+        finally:
+            self.finished.emit()
+
+
+class AddSyncSourceDialog(DialogBase):
+    def __init__(self, parent = None):
+        super().__init__(parent)
+
+        self.url = ""
+        self.options = capture_download_options()
+
+        self.init_UI()
+
+    def init_UI(self):
+        self.caption_lab = SubtitleLabel(self.tr("Add Sync Source"), self)
+
+        self.url_lab = BodyLabel(self.tr("Sync Source URL"), self)
+
+        self.url_box = LineEdit(self)
+        self.url_box.setPlaceholderText(self.tr("Paste favorites, collection, or bangumi link"))
+        self.url_box.setClearButtonEnabled(True)
+
+        self.options_btn = PushButton(FluentIcon.SETTING, self.tr("Edit download options"), self)
+
+        self.viewLayout.addWidget(self.caption_lab)
+        self.viewLayout.addSpacing(10)
+        self.viewLayout.addWidget(self.url_lab)
+        self.viewLayout.addWidget(self.url_box)
+        self.viewLayout.addSpacing(10)
+        self.viewLayout.addWidget(self.options_btn)
+
+        self.widget.setMinimumWidth(560)
+
+        self.yesButton.setText(self.tr("Add"))
+
+        self.url_box.textChanged.connect(lambda _: self.url_box.setError(False))
+        self.options_btn.clicked.connect(self.on_edit_options)
+
+    def on_edit_options(self):
+        from gui.dialog.download_options.dialog import DownloadOptionsDialog
+
+        with scoped_download_options(self.options):
+            dialog = DownloadOptionsDialog(self.parent())
+            dialog.setWindowTitle(self.tr("Sync Download Options"))
+
+            if not dialog.exec():
+                return
+
+            self.options = capture_download_options()
+
+        self.show_top_toast_message(
+            ToastNotificationCategory.SUCCESS,
+            "",
+            self.tr("Download options updated")
+        )
+
+    def accept(self):
+        self.url = self.url_box.text().strip()
+
+        is_valid = self.url != ""
+        self.url_box.setError(not is_valid)
+
+        if not is_valid:
+            self.url_box.setFocus()
+            self.show_top_toast_message(
+                ToastNotificationCategory.ERROR,
+                "",
+                self.tr("Please enter a sync source URL")
+            )
+            return
+
+        return super().accept()
 
 
 class SyncSourceItem(QWidget):
@@ -128,6 +235,7 @@ class SyncInterface(QFrame):
     def init_UI(self):
         self.title_label = TitleLabel(self.tr("Sync"), self)
 
+        self.add_btn = PrimaryPushButton(FluentIcon.ADD, self.tr("Add Sync"), self)
         self.check_all_btn = PrimaryPushButton(ExtendedFluentIcon.RETRY, self.tr("Check All"), self)
 
         self.list_widget = ListWidget(self)
@@ -139,6 +247,7 @@ class SyncInterface(QFrame):
         top_layout = QHBoxLayout()
         top_layout.addWidget(self.title_label)
         top_layout.addStretch()
+        top_layout.addWidget(self.add_btn)
         top_layout.addWidget(self.check_all_btn)
 
         main_layout = QVBoxLayout(self)
@@ -150,10 +259,68 @@ class SyncInterface(QFrame):
         self.connect_signals()
 
     def connect_signals(self):
+        self.add_btn.clicked.connect(self.on_add_source)
         self.check_all_btn.clicked.connect(lambda: signal_bus.sync.check_all.emit())
         signal_bus.sync.source_added.connect(lambda _: self.refresh_sources())
         signal_bus.sync.source_updated.connect(lambda _: self.refresh_sources())
         signal_bus.sync.source_removed.connect(lambda _: self.refresh_sources())
+
+    def on_add_source(self):
+        dialog = AddSyncSourceDialog(self.window())
+
+        if not dialog.exec():
+            return
+
+        url = dialog.url
+        options = deepcopy(dialog.options)
+
+        self.set_add_btn_loading(True)
+
+        worker = ManualSyncAddWorker(url, options)
+        worker.success.connect(self.on_add_source_success)
+        worker.error.connect(self.on_add_source_error)
+        worker.finished.connect(self.on_add_source_finished)
+        AsyncTask.run(worker)
+
+    @Slot(object, int)
+    def on_add_source_success(self, _source: SyncSourceInfo, item_count: int):
+        signal_bus.toast.show.emit(
+            ToastNotificationCategory.SUCCESS,
+            "",
+            self.tr("Sync source saved: {count} known items").format(count = item_count)
+        )
+
+    @Slot(str)
+    def on_add_source_error(self, error: str):
+        signal_bus.toast.show.emit(
+            ToastNotificationCategory.ERROR,
+            self.tr("Sync Failed"),
+            self._friendly_sync_error(error)
+        )
+
+    @Slot()
+    def on_add_source_finished(self):
+        self.set_add_btn_loading(False)
+
+    def _friendly_sync_error(self, error: str):
+        lower_error = error.lower()
+
+        if "invalid link" in lower_error:
+            return self.tr("Invalid sync source URL")
+
+        if "unsupported sync source" in lower_error or "only collection videos can be synced" in lower_error:
+            return self.tr("This source does not support sync downloads")
+
+        return error
+
+    def set_add_btn_loading(self, loading: bool):
+        self.add_btn.setEnabled(not loading)
+
+        if loading:
+            self.add_btn.setText(self.tr("Adding..."))
+
+        else:
+            self.add_btn.setText(self.tr("Add Sync"))
 
     def refresh_sources(self):
         self.list_widget.clear()

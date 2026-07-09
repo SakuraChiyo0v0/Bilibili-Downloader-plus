@@ -4524,11 +4524,59 @@ Under no circumstances shall the developer be liable for any direct, indirect, i
     </message>
 </context>
 <context>
+    <name>AddSyncSourceDialog</name>
+    <message>
+        <location filename="../../gui/interface/sync.py" line="55"/>
+        <source>Add Sync Source</source>
+        <translation>添加同步来源</translation>
+    </message>
+    <message>
+        <location filename="../../gui/interface/sync.py" line="57"/>
+        <source>Sync Source URL</source>
+        <translation>同步来源链接</translation>
+    </message>
+    <message>
+        <location filename="../../gui/interface/sync.py" line="60"/>
+        <source>Paste favorites, collection, or bangumi link</source>
+        <translation>粘贴收藏夹、合集或追番追剧链接</translation>
+    </message>
+    <message>
+        <location filename="../../gui/interface/sync.py" line="63"/>
+        <source>Edit download options</source>
+        <translation>编辑下载选项</translation>
+    </message>
+    <message>
+        <location filename="../../gui/interface/sync.py" line="75"/>
+        <source>Add</source>
+        <translation>添加</translation>
+    </message>
+    <message>
+        <location filename="../../gui/interface/sync.py" line="85"/>
+        <source>Sync Download Options</source>
+        <translation>同步下载选项</translation>
+    </message>
+    <message>
+        <location filename="../../gui/interface/sync.py" line="95"/>
+        <source>Download options updated</source>
+        <translation>下载选项已更新</translation>
+    </message>
+    <message>
+        <location filename="../../gui/interface/sync.py" line="110"/>
+        <source>Please enter a sync source URL</source>
+        <translation>请输入同步来源链接</translation>
+    </message>
+</context>
+<context>
     <name>SyncInterface</name>
     <message>
         <location filename="../../gui/interface/sync.py" line="111"/>
         <source>Sync</source>
         <translation>同步</translation>
+    </message>
+    <message>
+        <location filename="../../gui/interface/sync.py" line="204"/>
+        <source>Add Sync</source>
+        <translation>添加同步</translation>
     </message>
     <message>
         <location filename="../../gui/interface/sync.py" line="113"/>
@@ -4539,6 +4587,31 @@ Under no circumstances shall the developer be liable for any direct, indirect, i
         <location filename="../../gui/interface/sync.py" line="121"/>
         <source>No sync sources</source>
         <translation>暂无同步来源</translation>
+    </message>
+    <message>
+        <location filename="../../gui/interface/sync.py" line="248"/>
+        <source>Sync source saved: {count} known items</source>
+        <translation>同步来源已保存：已记录 {count} 项</translation>
+    </message>
+    <message>
+        <location filename="../../gui/interface/sync.py" line="254"/>
+        <source>Sync Failed</source>
+        <translation>同步失败</translation>
+    </message>
+    <message>
+        <location filename="../../gui/interface/sync.py" line="266"/>
+        <source>Invalid sync source URL</source>
+        <translation>同步来源链接无效</translation>
+    </message>
+    <message>
+        <location filename="../../gui/interface/sync.py" line="269"/>
+        <source>This source does not support sync downloads</source>
+        <translation>此来源不支持同步下载</translation>
+    </message>
+    <message>
+        <location filename="../../gui/interface/sync.py" line="263"/>
+        <source>Adding...</source>
+        <translation>添加中...</translation>
     </message>
 </context>
 <context>
