@@ -33,6 +33,7 @@ class Merger(QObject):
 
         self._output_audio_file = None
         self._embedded_cover_file_name = None
+        self._required_cleanup_files = set()
 
     def start(self):
         if self.task_info.Download.merge_video_audio:
@@ -43,15 +44,15 @@ class Merger(QObject):
             # 旧版 flv 分片下载合并
             self.merge_video_parts()
 
-        elif self.task_info.File.audio_file_ext == "m4a":
-            if self._task_option("m4a_to_mp3", config.get(config.m4a_to_mp3)):
-                # 将 m4a 转换为 mp3
-                self.m4a_to_mp3()
+        elif self.is_audio_only():
+            if self.should_convert_audio_to_mp3():
+                # Convert audio-only sources to MP3 when requested.
+                self.audio_to_mp3()
                 return
 
-            if self.check_attach_cover("attach_cover_audio"):
-                # 纯音频 m4a 不转换，嵌入封面
-                self.embed_cover_to_audio()
+            if self.should_write_audio_metadata():
+                # Rewrite audio-only files when tags or cover art need embedding.
+                self.write_audio_metadata()
                 return
 
             self.rename_output_file()
@@ -67,7 +68,7 @@ class Merger(QObject):
 
         if v_exists and a_exists:
             cover_path = self.check_attach_cover()
-            self._embedded_cover_file_name = cover_path
+            self.set_embedded_cover_file(cover_path)
 
             merge_cmd = FFmpegCommand.merge_video_audio(
                 video_path = self.temp_video_file_name,
@@ -96,7 +97,7 @@ class Merger(QObject):
         self.add_file(lists_path)
 
         cover_path = self.check_attach_cover()
-        self._embedded_cover_file_name = cover_path
+        self.set_embedded_cover_file(cover_path)
 
         merge_cmd = FFmpegCommand.merge_video_parts(
             lists_path = lists_path,
@@ -138,7 +139,8 @@ class Merger(QObject):
                     self._output_audio_file = self.temp_audio_file_name
 
                 final_audio_file_name = safe_rename(cwd, self._output_audio_file, self.final_audio_file_name).name
-                self.cleanup_embedded_cover()
+                if not self.cleanup_embedded_cover():
+                    return
                 self.add_file(final_audio_file_name, clear = True)
 
             self.finish()
@@ -158,14 +160,17 @@ class Merger(QObject):
             kept_original_files = []
 
             if not self.task_info.Download.keep_original_files:
-                self._cleanup_temporary_files(*self.task_info.File.relative_files)
+                if not self.cleanup_or_fail(*self.task_info.File.relative_files):
+                    return
             else:
                 kept_original_files = self.keep_original_files()
                 if self._has_error: return
 
-                self._cleanup_temporary_files(*self.task_info.File.relative_files)
+                if not self.cleanup_or_fail(*self.task_info.File.relative_files):
+                    return
 
-            self.cleanup_embedded_cover()
+            if not self.cleanup_embedded_cover():
+                return
             self.add_file(final_output_file_name, *kept_original_files, clear = True)
             self.finish()
 
@@ -177,14 +182,27 @@ class Merger(QObject):
             return
 
         try:
-            temp_source = getattr(self, "_temp_m4a_audio_name", self.temp_audio_file_name)
-            self.rename_output_file()
-
-            if not getattr(self, "_has_error", False):
-                self._cleanup_temporary_files(temp_source)
+            temp_source = getattr(self, "_temp_audio_source_name", getattr(self, "_temp_m4a_audio_name", self.temp_audio_file_name))
+            self.finish_audio_output(temp_source)
 
         except Exception as e:
             self.set_error_message(Translator.ERROR_MESSAGES("RENAME_FAILED"), str(e))
+
+    def finish_audio_output(self, *cleanup_file_names: str):
+        cwd = self.get_cwd()
+
+        if self._output_audio_file is None:
+            self._output_audio_file = self.temp_audio_file_name
+
+        final_audio_file_name = safe_rename(cwd, self._output_audio_file, self.final_audio_file_name).name
+        if not self.cleanup_embedded_cover():
+            return
+
+        if not self.cleanup_or_fail(*cleanup_file_names):
+            return
+
+        self.add_file(final_audio_file_name, clear = True)
+        self.finish()
 
     def mark_as_completed(self):
         if getattr(self, "_has_error", False):
@@ -201,6 +219,9 @@ class Merger(QObject):
 
     def finish(self):
         if getattr(self, "_has_error", False):
+            return
+
+        if not self.verify_cleanup_before_finish():
             return
 
         if self.task_info.File.storage_type == StorageType.LOCAL.value:
@@ -337,6 +358,30 @@ class Merger(QObject):
     def _task_option(self, key: str, default=None):
         return get_task_option(self.task_info, key, default)
 
+    def set_embedded_cover_file(self, file_name: str | None):
+        self._embedded_cover_file_name = file_name
+
+        if file_name and self._task_option("cleanup_cover_after_attach", config.get(config.cleanup_cover_after_attach)):
+            self._required_cleanup_files.add(file_name)
+
+    def is_audio_only(self):
+        has_video = self.task_info.Download.type & DownloadType.VIDEO != 0
+        has_audio = self.task_info.Download.type & DownloadType.AUDIO != 0
+
+        return has_audio and not has_video
+
+    def should_convert_audio_to_mp3(self):
+        return (
+            self.task_info.File.audio_file_ext in {"m4a", "flac"} and
+            self._task_option("m4a_to_mp3", config.get(config.m4a_to_mp3))
+        )
+
+    def should_write_audio_metadata(self):
+        return (
+            self.task_info.File.audio_file_ext in {"m4a", "flac"} and
+            (self.get_metadata_tags() or self.check_attach_cover("attach_cover_audio"))
+        )
+
     def add_file(self, *args: str, clear = False):
         if clear:
             self.task_info.File.relative_files.clear()
@@ -354,37 +399,75 @@ class Merger(QObject):
 
         try:
             safe_remove(self.get_cwd(), *file_names)
+
+            for file_name in file_names:
+                self._required_cleanup_files.discard(file_name)
+
             return True
         except Exception:
             logger.warning("清理临时文件失败: %s", ", ".join(file_names), exc_info = True)
             return False
 
-    def m4a_to_mp3(self):
-        cwd = self.get_cwd()
+    def cleanup_or_fail(self, *file_names: str):
+        file_names = [file_name for file_name in file_names if file_name]
 
-        if Path(cwd, self.temp_audio_file_name).exists():
+        if self._cleanup_temporary_files(*file_names):
+            return True
+
+        self.set_cleanup_error(*file_names)
+        return False
+
+    def set_cleanup_error(self, *file_names: str):
+        file_names = [file_name for file_name in file_names if file_name]
+        description = Translator.ERROR_MESSAGES("CLEANUP_FAILED_DETAIL").format(files = "\n".join(file_names))
+
+        self.set_error_message(Translator.ERROR_MESSAGES("CLEANUP_FAILED"), description)
+
+        signal_bus.download.auto_manage_concurrent_downloads.emit()
+
+    def verify_cleanup_before_finish(self):
+        cwd = self.get_cwd()
+        remaining_files = [
+            file_name for file_name in self._required_cleanup_files
+            if Path(cwd, file_name).exists()
+        ]
+
+        if remaining_files:
+            self.set_cleanup_error(*remaining_files)
+            return False
+
+        return True
+
+    def audio_to_mp3(self):
+        cwd = self.get_cwd()
+        source_audio_file_name = self.temp_audio_file_name
+
+        if Path(cwd, source_audio_file_name).exists():
             self.task_info.Download.status = DownloadStatus.CONVERTING
             signal_bus.download.update_downloading_item.emit(self.task_info)
 
-            self._temp_m4a_audio_name = self.temp_audio_file_name
+            self._temp_audio_source_name = source_audio_file_name
+            self._temp_m4a_audio_name = source_audio_file_name
             self.task_info.File.audio_file_ext = "mp3"
 
             self._output_audio_file = self.temp_audio_file_name
 
             cover_path = self.check_attach_cover("attach_cover_audio")
-            self._embedded_cover_file_name = cover_path
-            self._m4a_to_mp3_cover_retry_available = bool(cover_path)
+            self.set_embedded_cover_file(cover_path)
 
-            self._start_m4a_to_mp3(cwd, cover_path)
+            self._start_audio_to_mp3(cwd, cover_path)
         else:
             self.set_error_message(
                 Translator.ERROR_MESSAGES("DOWNLOAD_FAILED"),
-                Translator.ERROR_MESSAGES("M4A_NOT_FOUND")
+                Translator.ERROR_MESSAGES("FILE_NOT_FOUND_DETAIL")
             )
 
-    def _start_m4a_to_mp3(self, cwd: Path, cover_path: str | None):
-        convert_cmd = FFmpegCommand.convert_m4a_to_mp3(
-            input_path = self._temp_m4a_audio_name,
+    def m4a_to_mp3(self):
+        self.audio_to_mp3()
+
+    def _start_audio_to_mp3(self, cwd: Path, cover_path: str | None):
+        convert_cmd = FFmpegCommand.convert_audio_to_mp3(
+            input_path = self._temp_audio_source_name,
             output_path = self.temp_audio_file_name,
             cover_path = cover_path,
             metadata = self.get_metadata_tags()
@@ -396,14 +479,10 @@ class Merger(QObject):
         self._ffmpeg_runner.error_signal.connect(self.on_m4a_to_mp3_error)
         self._ffmpeg_runner.start()
 
-    def on_m4a_to_mp3_error(self, error: Exception, stdout: str, stderr: str):
-        if getattr(self, "_m4a_to_mp3_cover_retry_available", False):
-            self._m4a_to_mp3_cover_retry_available = False
-            self._embedded_cover_file_name = None
-            logger.warning("带封面转换 MP3 失败，将不嵌入封面重试: %s", stderr)
-            self._start_m4a_to_mp3(self.get_cwd(), None)
-            return
+    def _start_m4a_to_mp3(self, cwd: Path, cover_path: str | None):
+        self._start_audio_to_mp3(cwd, cover_path)
 
+    def on_m4a_to_mp3_error(self, error: Exception, stdout: str, stderr: str):
         self.on_merge_error(error, stdout, stderr)
 
     def get_metadata_tags(self):
@@ -443,35 +522,41 @@ class Merger(QObject):
         cover_file_name = getattr(self, "_embedded_cover_file_name", None)
 
         if not cover_file_name or not self._task_option("cleanup_cover_after_attach", config.get(config.cleanup_cover_after_attach)):
-            return
+            return True
 
-        if not self._cleanup_temporary_files(cover_file_name):
-            return
+        if not self.cleanup_or_fail(cover_file_name):
+            return False
 
         if cover_file_name in self.task_info.File.additional_files:
             self.task_info.File.additional_files.remove(cover_file_name)
 
-    def embed_cover_to_audio(self):
+        return True
+
+    def write_audio_metadata(self):
         cwd = self.get_cwd()
         cover_path = self.check_attach_cover("attach_cover_audio")
+        metadata = self.get_metadata_tags()
 
-        if not cover_path:
+        if not cover_path and not metadata:
             self.rename_output_file()
             return
 
-        self._embedded_cover_file_name = cover_path
+        self.set_embedded_cover_file(cover_path)
         self._cover_embed_source = self.temp_audio_file_name
         self._cover_embed_temp_output = f"cover_output_{self.task_info.Basic.task_id}.{self.task_info.File.audio_file_ext}"
         self._cover_embed_final = self.final_audio_file_name
 
-        cmd = FFmpegCommand.attach_cover_to_m4a(
+        cmd = FFmpegCommand.write_audio_metadata(
             input_path = self._cover_embed_source,
             output_path = self._cover_embed_temp_output,
             cover_path = cover_path,
-            metadata = self.get_metadata_tags()
+            metadata = metadata
         )
 
         self._run_cover_embed(cmd, cwd)
+
+    def embed_cover_to_audio(self):
+        self.write_audio_metadata()
 
     def _run_cover_embed(self, cmd: FFmpegCommand, cwd: Path):
         self.task_info.Download.status = DownloadStatus.CONVERTING
@@ -491,9 +576,12 @@ class Merger(QObject):
             cwd = self.get_cwd()
 
             final_file_name = safe_rename(cwd, self._cover_embed_temp_output, self._cover_embed_final).name
-            self._cleanup_temporary_files(self._cover_embed_source)
+            if not self.cleanup_or_fail(self._cover_embed_source):
+                return
 
-            self.cleanup_embedded_cover()
+            if not self.cleanup_embedded_cover():
+                return
+
             self.add_file(final_file_name, clear = True)
             self.finish()
 

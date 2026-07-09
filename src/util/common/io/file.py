@@ -11,22 +11,35 @@ logger = logging.getLogger(__name__)
 _rename_lock = Lock()
 
 
-def safe_remove(cwd: str | Path, *file_names: str, retries: int = 3, delay: float = 0.2):
+def safe_remove(cwd: str | Path, *file_names: str, retries: int = 8, delay: float = 0.25):
     for file_name in file_names:
         if not file_name:
             continue
 
         path = Path(cwd, file_name)
+        last_error = None
+
         for attempt in range(retries + 1):
             try:
+                if not path.exists():
+                    break
+
                 path.unlink(missing_ok=True)
+
+                if not path.exists():
+                    break
+
+                last_error = FileExistsError(f"File still exists after deletion: {path}")
+            except FileNotFoundError:
                 break
             except Exception as e:
-                if attempt >= retries:
-                    logger.exception("删除文件 %s 时出错", path)
-                    raise e
+                last_error = e
 
-                time.sleep(delay)
+            if attempt >= retries:
+                logger.error("删除文件 %s 时出错", path)
+                raise last_error or FileExistsError(f"Failed to delete file: {path}")
+
+            time.sleep(delay * (attempt + 1))
 
 
 def safe_rename(cwd: str | Path, original_file_name: str, new_file_name: str) -> Path:

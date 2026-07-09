@@ -265,6 +265,8 @@ class Translator:
             "CANNOT_CREATE": translate("ERROR_MESSAGES", "Could not create output file"),
             "DOWNLOAD_FAILED": translate("ERROR_MESSAGES", "Download failed"),
             "RENAME_FAILED": translate("ERROR_MESSAGES", "Failed to rename file"),
+            "CLEANUP_FAILED": translate("ERROR_MESSAGES", "Failed to clean up temporary files"),
+            "CLEANUP_FAILED_DETAIL": translate("ERROR_MESSAGES", "The following temporary files could not be removed:\n{files}\n\nPlease close any program using them and retry the FFmpeg step."),
             "PARSE_FAILED": translate("ERROR_MESSAGES", "Failed to parse download information"),
             "MEDIA_INFO_FAILED": translate("ERROR_MESSAGES", "Failed to retrieve media information"),
             "LOGIN_EXPIRED": translate("ERROR_MESSAGES", "Login status expired"),

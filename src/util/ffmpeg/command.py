@@ -108,7 +108,7 @@ class FFmpegCommand:
         return cmd.add_output(output_path)
 
     @classmethod
-    def convert_m4a_to_mp3(cls, input_path: str, output_path: str, cover_path: str = None, metadata: dict = None):
+    def convert_audio_to_mp3(cls, input_path: str, output_path: str, cover_path: str = None, metadata: dict = None):
         if cover_path:
             cmd = (
                 cls()
@@ -133,6 +133,10 @@ class FFmpegCommand:
         cls._add_metadata(cmd, metadata, output_path)
 
         return cmd.add_output(output_path)
+
+    @classmethod
+    def convert_m4a_to_mp3(cls, input_path: str, output_path: str, cover_path: str = None, metadata: dict = None):
+        return cls.convert_audio_to_mp3(input_path, output_path, cover_path, metadata)
     
     @classmethod
     def fix_mp4_box(cls, input_path: str, output_path: str):
@@ -145,19 +149,20 @@ class FFmpegCommand:
         )
 
     @classmethod
-    def attach_cover_to_m4a(cls, input_path: str, output_path: str, cover_path: str, metadata: dict = None):
-        cmd = (
-            cls()
-            .add_input(input_path)
-            .add_input(cover_path)
-            .add_param("-map", "0:a:0")
-            .add_param("-map", "1:v:0")
-            .add_param("-c:a", "copy")
-            .add_param("-c:v:0", "mjpeg")
-            .add_param("-disposition:v:0", "attached_pic")
-            .add_param("-pix_fmt:v:0", "yuvj420p")
-        )
+    def write_audio_metadata(cls, input_path: str, output_path: str, cover_path: str = None, metadata: dict = None):
+        cmd = cls().add_input(input_path).add_param("-map", "0:a:0").add_param("-c:a", "copy")
+
+        if cover_path:
+            cmd.add_input(cover_path)
+            cmd.add_param("-map", "1:v:0")
+            cmd.add_param("-c:v:0", "mjpeg")
+            cmd.add_param("-disposition:v:0", "attached_pic")
+            cmd.add_param("-pix_fmt:v:0", "yuvj420p")
         
         cls._add_metadata(cmd, metadata, output_path)
 
         return cmd.add_output(output_path)
+
+    @classmethod
+    def attach_cover_to_m4a(cls, input_path: str, output_path: str, cover_path: str, metadata: dict = None):
+        return cls.write_audio_metadata(input_path, output_path, cover_path, metadata)

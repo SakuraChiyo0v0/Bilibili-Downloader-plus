@@ -483,7 +483,7 @@ class DownloadFormatCard(ExpandGroupSettingCard):
         self.m4a_to_mp3_switch = SettingSwitchButton(config.m4a_to_mp3, self)
 
         self.addGroup(FluentIcon.VIDEO, self.tr("Output Container Format"), self.tr("Choose the container format for the final output video file"), self.video_container_choice)
-        self.addGroup(FluentIcon.MUSIC, self.tr("Convert M4A to MP3"), self.tr("Only applies when downloading audio-only streams. Disabled if video is also selected."), self.m4a_to_mp3_switch)
+        self.addGroup(FluentIcon.MUSIC, self.tr("Convert Audio to MP3"), self.tr("Applies to audio-only M4A/FLAC streams. Disabled if video is also selected."), self.m4a_to_mp3_switch)
 
 class ParsingSettingCard(ExpandGroupSettingCard):
     def tr_with_chinese_fallback(self, source: str, simplified: str, traditional: str):

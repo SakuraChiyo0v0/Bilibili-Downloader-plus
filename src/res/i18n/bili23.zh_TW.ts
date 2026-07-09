@@ -945,13 +945,13 @@ Please note that download history is the sole basis for recognizing downloaded v
     </message>
     <message>
         <location filename="../../gui/component/setting/card.py" line="460"/>
-        <source>Convert M4A to MP3</source>
-        <translation>將 M4A 轉換為 MP3</translation>
+        <source>Convert Audio to MP3</source>
+        <translation>將音訊轉換為 MP3</translation>
     </message>
     <message>
         <location filename="../../gui/component/setting/card.py" line="460"/>
-        <source>Only applies when downloading audio-only streams. Disabled if video is also selected.</source>
-        <translation>僅於下載純音訊串流時有效</translation>
+        <source>Applies to audio-only M4A/FLAC streams. Disabled if video is also selected.</source>
+        <translation>僅於下載純音訊 M4A/FLAC 串流時有效</translation>
     </message>
 </context>
 <context>
@@ -1415,6 +1415,22 @@ If you continue, please disable the &quot;Preallocate file space&quot; option. (
         <location filename="../../util/common/translator.py" line="264"/>
         <source>Failed to rename file</source>
         <translation>重新命名檔案失敗</translation>
+    </message>
+    <message>
+        <location filename="../../util/common/translator.py" line="265"/>
+        <source>Failed to clean up temporary files</source>
+        <translation>清理暫存檔案失敗</translation>
+    </message>
+    <message>
+        <location filename="../../util/common/translator.py" line="266"/>
+        <source>The following temporary files could not be removed:
+{files}
+
+Please close any program using them and retry the FFmpeg step.</source>
+        <translation>以下暫存檔案未能刪除：
+{files}
+
+請關閉正在使用這些檔案的程式，然後重試 FFmpeg 步驟。</translation>
     </message>
     <message>
         <location filename="../../util/common/translator.py" line="265"/>
