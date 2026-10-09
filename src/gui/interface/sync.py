@@ -7,7 +7,7 @@ from PySide6.QtWidgets import QFrame, QHBoxLayout, QListWidgetItem, QVBoxLayout,
 from qfluentwidgets import BodyLabel, FluentIcon, LineEdit, ListWidget, PrimaryPushButton, PushButton, SubtitleLabel, SwitchButton, TitleLabel
 
 from gui.component.dialog import DialogBase
-from gui.component.widget import ToolButton
+from gui.component.widget.button import ToolButton
 
 from util.common.enum import ToastNotificationCategory, ConventionType
 from util.common.icon import ExtendedFluentIcon
