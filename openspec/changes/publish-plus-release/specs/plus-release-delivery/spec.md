@@ -1,0 +1,19 @@
+## ADDED Requirements
+
+### Requirement: 可选的真实签名
+Windows 发布流程 SHALL 在签名凭据可用时执行签名，不可用时仍能构建未签名产物，并在发布说明中清楚标注。
+
+#### Scenario: fork 没有上游签名凭据
+- **WHEN** 仓库没有配置签名凭据
+- **THEN** 签名与签名卸载器准备步骤跳过，安装器正常构建，Release 标明未签名
+
+### Requirement: 验证后发布
+发布流程 SHALL 在所选完整平台矩阵构建成功后生成草稿 Release 与 SHA256 清单，验证后才作为最新版公开。
+
+#### Scenario: 构建失败
+- **WHEN** 任一必需构建任务失败
+- **THEN** 不将不完整产物集作为正式最新版发布
+
+#### Scenario: 产物核验完成
+- **WHEN** 版本、产物集合和校验和均已核对
+- **THEN** 发布对应源码标签的增强版 Release，明确验证范围和已知限制

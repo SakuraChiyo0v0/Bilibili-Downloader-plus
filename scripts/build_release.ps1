@@ -104,6 +104,23 @@ Write-Host "版本  : $AppVersion" -ForegroundColor DarkGray
 # ---------- 1. 铺开 runtime ----------
 Step "准备发布目录"
 
+# 删除前将目标限定在本仓库内，并排除源码、运行时输入及其父目录。
+$buildRoot = [IO.Path]::GetFullPath($root).TrimEnd('\', '/')
+$OutputDir = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($OutputDir)
+$OutputDir = [IO.Path]::GetFullPath($OutputDir).TrimEnd('\', '/')
+if (-not $OutputDir.StartsWith($buildRoot + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase)) {
+    throw "输出目录必须是仓库内的专用构建子目录：$OutputDir"
+}
+foreach ($inputDir in @($SourceDir, $RuntimeDir)) {
+    $inputPath = (Resolve-Path -LiteralPath $inputDir).ProviderPath.TrimEnd('\', '/')
+    $separator = [IO.Path]::DirectorySeparatorChar
+    if ($inputPath -eq $OutputDir -or
+        $inputPath.StartsWith($OutputDir + $separator, [StringComparison]::OrdinalIgnoreCase) -or
+        $OutputDir.StartsWith($inputPath + $separator, [StringComparison]::OrdinalIgnoreCase)) {
+        throw "输出目录不能与源码或运行时输入重叠：$OutputDir"
+    }
+}
+
 if (Test-Path -LiteralPath $OutputDir) {
     Remove-Item -LiteralPath $OutputDir -Recurse -Force
 }

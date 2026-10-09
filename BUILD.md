@@ -63,4 +63,10 @@ $env:PATH = "$(Join-Path $PWD '.venv/Scripts');$env:PATH"
 
 脚本先打包源码、生成清单，再编译 `launcher`，输出未签名的 `release/Bili23.exe`。`OutputDir` 会被重新创建，应只指定专用构建目录，不能指向源码、运行时输入或个人数据目录。
 
-安装包使用 `assets/setup.iss`。版本替换、语言包、Windows 签名以及各平台打包步骤以 `.github/workflows/publish.yml` 为准。签名依赖仓库的 `signing` 环境与相应凭据，fork 不能默认复用上游凭据。本次同步只验证源码，不执行发布流程。
+安装包使用 `assets/setup.iss`。版本替换、语言包、Windows 签名以及各平台打包步骤以 `.github/workflows/publish.yml` 为准。签名使用本仓库 `signing` 环境中的 `CERTUM_EMAIL`、`CERTUM_OTP`，也可由仓库级同名 secret 提供。两项齐全时执行签名，否则生成未签名包；不会复用上游凭据或声称已经签名。
+
+## 发布流程
+
+用户明确授权发布后，将对应源码与变更记录提交到本仓库，再从 Actions 手动触发 `Publish release`，填写与源码一致的标签并选择平台。完整 Windows／Linux／macOS 矩阵成功后，工作流会校验 13 个发行产物、生成 `SHA256SUMS.txt`，并创建草稿 Release。只选择部分平台时保留构建 artifacts，不生成完整发行。
+
+核对草稿中的版本、产物、校验和与必要冒烟结果后，才将草稿发布为最新版。Windows 未签名状态、macOS 签名／公证状态、实际验证范围和升级限制必须如实写入发行说明。已有公开发行不得用未经核验的新文件覆盖。

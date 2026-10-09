@@ -76,10 +76,12 @@ jobs:
       VERSION: ${{ needs.get-version.outputs.VERSION }}
       VERSION_NAME: ${{ needs.get-version.outputs.VERSION_NAME }}
       IS_PRERELEASE: ${{ needs.get-version.outputs.IS_PRERELEASE }}
+      WINDOWS_SIGNING_ENABLED: ${{ secrets.CERTUM_EMAIL != '' && secrets.CERTUM_OTP != '' }}
     outputs:
       VERSION: ${{ env.VERSION }}
       VERSION_NAME: ${{ env.VERSION_NAME }}
       IS_PRERELEASE: ${{ env.IS_PRERELEASE }}
+      WINDOWS_SIGNED: ${{ env.WINDOWS_SIGNING_ENABLED }}
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v7
@@ -153,6 +155,7 @@ jobs:
 
       # 生成卸载程序签名包
       - name: Prepare uninstaller for signing
+        if: env.WINDOWS_SIGNING_ENABLED == 'true'
         run: |
           # setup.iss 里的相对路径（.\Bili23-Downloader、.\LICENSE）是相对它
           # 自身所在目录解析的，所以要先拷到仓库根再调用
@@ -175,6 +178,7 @@ jobs:
 
       # loader 与卸载程序一起签，只走一次签名流程
       - name: Sign Windows Loader and Uninstaller
+        if: env.WINDOWS_SIGNING_ENABLED == 'true'
         uses: IvanHanloth/super-simply-sign@0.1.1
         with:
           files: |
@@ -190,17 +194,21 @@ jobs:
           # 便携版：直接打包为 zip
           7z a -tzip -mx=9 Bili23-Downloader_${{ env.VERSION_NAME }}_windows_x64_portable.zip Bili23-Downloader\*
 
-          # 安装版：使用 Inno Setup 创建安装程序（setup.iss 已在准备卸载程序时拷到仓库根），
-          # 嵌入上一步签好名的卸载程序
+          # 未配置签名凭据时也保留正常的安装包构建路径。
+          Copy-Item -LiteralPath "assets\setup.iss" -Destination ".\setup.iss" -Force
           $inno = $env:INNO_COMPILER
-          $script = ".\setup.iss"
-
-          & $inno "/DSignedUninstallerDir=$env:UNINSTALLER_DIR" "$script"
+          $setupArgs = @(".\setup.iss")
+          if ($env:WINDOWS_SIGNING_ENABLED -eq 'true') {
+            $setupArgs = @("/DSignedUninstallerDir=$env:UNINSTALLER_DIR", ".\setup.iss")
+          }
+          & $inno @setupArgs
+          if ($LASTEXITCODE -ne 0) { throw "Windows installer build failed" }
 
       # 安装程序是用户下载后双击的那个文件，与 loader 是两条独立的信任路径：
       # 上面那次签名覆盖便携版里的 exe，这次覆盖 setup 本身。
       # 必须等 ISCC 跑完 —— 签名要在打包之后，反过来安装包里装的就是未签名的 loader
       - name: Sign Windows Installer
+        if: env.WINDOWS_SIGNING_ENABLED == 'true'
         uses: IvanHanloth/super-simply-sign@0.1.1
         with:
           files: |
@@ -222,10 +230,19 @@ jobs:
         run: |
           # 刚打好的安装程序必须先删掉：Win7 版用的是同一份 setup.iss，
           # 输出文件名与它完全相同，会把它直接覆盖掉
-          Remove-Item -Path Bili23-Downloader -Recurse -Force -ErrorAction SilentlyContinue
-          Remove-Item -Path windows_x64_runtime.zip -Force -ErrorAction SilentlyContinue
-          Remove-Item -Path Bili23-Downloader_${{ env.VERSION_NAME }}_windows_x64_portable.zip -Recurse -Force -ErrorAction SilentlyContinue
-          Remove-Item -Path Bili23-Downloader_${{ env.VERSION_NAME }}_windows_x64.exe -Recurse -Force -ErrorAction SilentlyContinue
+          $buildRoot = [IO.Path]::GetFullPath($env:GITHUB_WORKSPACE).TrimEnd('\')
+          $cleanupNames = @(
+            'Bili23-Downloader', 'windows_x64_runtime.zip',
+            "Bili23-Downloader_$($env:VERSION_NAME)_windows_x64_portable.zip",
+            "Bili23-Downloader_$($env:VERSION_NAME)_windows_x64.exe"
+          )
+          foreach ($name in $cleanupNames) {
+            $target = [IO.Path]::GetFullPath((Join-Path $buildRoot $name))
+            if (-not $target.StartsWith($buildRoot + '\', [StringComparison]::OrdinalIgnoreCase)) {
+              throw "Cleanup target is outside the build workspace"
+            }
+            if (Test-Path -LiteralPath $target) { Remove-Item -LiteralPath $target -Recurse -Force }
+          }
 
       - name: Prepare Windows 7 runtime
         run: |
@@ -241,6 +258,7 @@ jobs:
           .\scripts\build_release.ps1 -RuntimeDir runtime-src-win7 -OutputDir Bili23-Downloader -AppVersion $env:VERSION_NAME
 
       - name: Sign Windows 7 Loader
+        if: env.WINDOWS_SIGNING_ENABLED == 'true'
         uses: IvanHanloth/super-simply-sign@0.1.1
         with:
           files: |
@@ -255,15 +273,19 @@ jobs:
           # 使用 Inno Setup 创建安装程序，卸载程序复用正式版那步签好的
 
           $inno = $env:INNO_COMPILER
-          $script = ".\setup.iss"
-
-          & $inno "/DSignedUninstallerDir=$env:UNINSTALLER_DIR" "$script"
+          $setupArgs = @(".\setup.iss")
+          if ($env:WINDOWS_SIGNING_ENABLED -eq 'true') {
+            $setupArgs = @("/DSignedUninstallerDir=$env:UNINSTALLER_DIR", ".\setup.iss")
+          }
+          & $inno @setupArgs
+          if ($LASTEXITCODE -ne 0) { throw "Windows 7 installer build failed" }
 
           # 重命名文件
           Rename-Item -Path "Bili23-Downloader_${{ env.VERSION_NAME }}_windows_x64.exe" -NewName "Bili23-Downloader_${{ env.VERSION_NAME }}_windows_x64_for_win7.exe"
 
       # 与正式版同理：先签内嵌的 loader，打完包再签安装程序自己
       - name: Sign Windows 7 Installer
+        if: env.WINDOWS_SIGNING_ENABLED == 'true'
         uses: IvanHanloth/super-simply-sign@0.1.1
         with:
           files: |
@@ -746,15 +768,14 @@ jobs:
           path: Bili23-Downloader_${{ env.VERSION_NAME }}_macos_${{ matrix.arch }}.dmg
   
   publish:
-    if: github.event_name != 'workflow_dispatch'
     needs: [get-version, windows-build, linux-build, macos-build]
     env:
       VERSION_NAME: ${{ needs.get-version.outputs.VERSION_NAME }}
       IS_PRERELEASE: ${{ needs.get-version.outputs.IS_PRERELEASE }}
+      WINDOWS_SIGNED: ${{ needs.windows-build.outputs.WINDOWS_SIGNED }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
-      discussions: write
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
@@ -770,18 +791,9 @@ jobs:
         run: |
           ls -la release-artifacts
 
-      - name: Update CHANGELOG.md
+      - name: Prepare release notes and checksums
         run: |
-          # 在原有的 CHANGELOG.md 基础上，添加安全提示
-          echo "" >> CHANGELOG.md
-          echo "> [!CAUTION]" >> CHANGELOG.md
-          echo "> 强烈建议仅通过官方 GitHub 链接（即本页面下方的链接）下载本软件。 从第三方网站、网盘论坛或他人私下分享渠道获取的安装包，极有可能被二次篡改或植入病毒/木马。对于因下载、运行非官方渠道安装包所导致的任何设备损坏、隐私泄露或财产损失，开发者概不负责。" >> CHANGELOG.md
-
-          echo "" >> CHANGELOG.md
-
-          echo "> [!TIP]" >> CHANGELOG.md
-          echo "> Windows 7 以及低于 Windows 10 1809 的用户，请下载 Win 7 兼容版（带有 for_win7 字样）" >> CHANGELOG.md
-          echo "> 其他问题请参考 [常见问题(FAQ)](https://bili23.scott-sloan.cn/doc/faq.html)" >> CHANGELOG.md
+          python scripts/prepare_release.py release-artifacts "$VERSION_NAME" --notes release-notes.md --windows-signed "$WINDOWS_SIGNED"
 
       - name: Upload to Release
         uses: softprops/action-gh-release@v3
@@ -791,11 +803,10 @@ jobs:
           name: v${{ env.VERSION_NAME }}
           tag_name: v${{ env.VERSION_NAME }}
           target_commitish: ${{ github.sha }}
-          body_path: CHANGELOG.md
-          make_latest: ${{ env.IS_PRERELEASE != 'true' }}
-          draft: false
+          body_path: release-notes.md
+          make_latest: false
+          draft: true
           prerelease: ${{ env.IS_PRERELEASE == 'true' }}
           generate_release_notes: false
-          discussion_category_name: announcements
           files: |
             release-artifacts/*
