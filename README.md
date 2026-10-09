@@ -1,108 +1,100 @@
-<p align="center">
-    <a href="https://bili23.scott-sloan.cn" target="_blank">
-        <img src="https://bili23.scott-sloan.cn/logo.png" alt="Bili23 Downloader" style="width: 500px;"/>
-    </a>
-</p>
+# Bilibili Downloader Plus
 
-<h1 align="center">Bili23-Downloader-plus</h1>
+**在 Bili23 Downloader 基础上，增加持续同步、音频整理与 WebDAV 存储。**
 
-开源、免费、跨平台的 B 站视频下载工具，支持多线程加速、音视频分离、弹幕元数据获取、自定义命名与分类等功能。在原有功能基础上增加**「纯音频封面嵌入」「自动写入MP3标签」「通过WebDAV下载至远程服务器」**三项功能
+[![Release](https://img.shields.io/github/v/release/SakuraChiyo0v0/Bilibili-Downloader-plus?style=flat-square)](https://github.com/SakuraChiyo0v0/Bilibili-Downloader-plus/releases)
+[![Quality](https://github.com/SakuraChiyo0v0/Bilibili-Downloader-plus/actions/workflows/quality.yml/badge.svg)](https://github.com/SakuraChiyo0v0/Bilibili-Downloader-plus/actions/workflows/quality.yml)
+[![License](https://img.shields.io/github/license/SakuraChiyo0v0/Bilibili-Downloader-plus?style=flat-square)](LICENSE)
 
-<p align="center">
-    <img src="https://img.shields.io/github/v/release/ScottSloan/Bili23-Downloader?style=flat-square" alt="Release"/>
-    <img src="https://img.shields.io/github/license/ScottSloan/Bili23-Downloader?style=flat-square" alt="License"/>
-    <img src="https://img.shields.io/github/downloads/ScottSloan/Bili23-Downloader/total?style=flat-square" alt="Downloads"/>
-    <img src="https://img.shields.io/github/stars/ScottSloan/Bili23-Downloader?style=flat-square" alt="Stars"/>
-    <img src="https://img.shields.io/github/actions/workflow/status/ScottSloan/Bili23-Downloader/publish.yml?style=flat-square" alt="Build"/>
-</p>
+**简体中文** · [English](README_en.md) · [下载增强版](https://github.com/SakuraChiyo0v0/Bilibili-Downloader-plus/releases) · [反馈问题](https://github.com/SakuraChiyo0v0/Bilibili-Downloader-plus/issues) · [更新记录](CHANGELOG.md)
 
-<div align="center">
-    <h3>
-        <a href="https://bili23.scott-sloan.cn/">项目官网</a>
-        <span> • </span>
-        <a href="https://bili23.scott-sloan.cn/doc/intro.html">说明文档</a>
-        <span> • </span>
-        <a href="#-下载地址">下载地址</a>
-        <span> • </span>
-        <a href="README.md">中文</a>
-        <span> • </span>
-        <a href="README_en.md">English</a>
-    </h3>
-</div>
+## 致谢与项目定位
 
-<div align="center">
-    <strong>开源、免费、跨平台的 B 站视频下载工具</strong><br>
-</div><br>
+本项目 fork 自 **[ScottSloan / Bili23-Downloader](https://github.com/ScottSloan/Bili23-Downloader)**。视频解析、下载引擎、桌面界面及大部分基础能力来自 Scott Sloan 和上游贡献者。感谢他们持续维护这款开源工具。
 
-<p align="center"><img src="https://bili23.scott-sloan.cn/main_interface_cn.png" alt="程序截图" style="width: 80%;"></p>
+Plus 的定位是**增强上游能力**：跟随上游版本与设计，在现有下载流程之上补充功能。遇到实现重叠或冲突，优先采用上游方案，再适配增强功能。这里主要介绍 Plus 增加了什么；登录、画质、字幕、命名规则等通用操作请查阅[上游文档](https://bili23.scott-sloan.cn/)。
 
-## ⚡ 程序特性
+当前源码基于上游 **2.20.0**，增强版标识为 **`2.20.0+plus.1`**。本文介绍当前源码，安装包实际包含的能力请以对应 Release 说明为准。
 
-| 特性 | 详细说明 |
-| :--- | :--- |
-| 🖥️ **跨平台支持** | 完美兼容 **Windows**（含 Win 7）、**Linux** 和 **macOS** 三大桌面操作系统。 |
-| 🎨 **现代 UI 设计** | 基于 Fluent Design 设计语言，支持浅色 / 深色主题无缝切换，原生适配高分屏。 | 
-| 🚀 **多线程与加速**| 原生集成多线程并行下载、断点续传及网络异常自动重试机制，提供极致的下载速率。 |
-| 🔗 **多类型解析** | 全面支持：`投稿视频`、`番剧`、`课程`、`UP主空间`、`收藏夹`、`每周必看`、`订阅合集`、`追番追剧`、`稍后再看`、`历史记录`等，支持批量处理。 |
-| ⚙️ **音视频自定义**| **画质**：`8K`、`4K`、`HDR`、`杜比视界`等 <br>**音质**：`Hi-Res 无损`、`杜比全景声`等 <br>**编码**：`AVC`、`HEVC`、`AV1` |
-| 💬 **弹幕与字幕** | **弹幕**：`xml`、`ass`、`json`<br>**字幕**：`srt`、`lrc`、`txt`、`ass`、`json` |
-| 🖼️ **封面解析嵌入**| 无损保存原图质量（`jpg`、`png`、`avif`、`webp`），并原生支持将图片自动嵌入最终的视频文件中。 |
-| 🧩 **NFO 元数据** | 自动刮削并生成符合 **Kodi**、**Jellyfin**、**Emby** 等媒体中心标准格式的本地媒体元数据。 |
-| 📁 **分类与命名** | 内置强大规则引擎，支持高度自定义的本地文件命名模板与多级目录分类存储模式。 |
-| 📦 **封装格式转化**| 智能音视频流混合提取，支持封装输出为 `mp4` 或 `mkv`，充分满足不同播放设备的兼容需求。 |
-| 🌐 **国际化支持** | 内置多语言界面，开箱可用：简体中文、繁体中文、English。 |
-| 🔒 **账号安全登录**| 支持快捷安全的**扫码登录**与**短信验证登录**。 |
-| 📖 **完全开源免费**| 基于 **GPL-3.0** 协议发布，代码完全开源、无内购、无广告，拥抱社区共建。 |
+## Plus 增加了什么
 
-## 📥 下载地址
+| 能力 | 具体用途 |
+| --- | --- |
+| **持续同步下载** | 将收藏夹、合集或番剧保存为同步源，定期检查新增条目，并按该源保存的选项创建下载任务。 |
+| **音频封面与标签** | 为纯音频文件嵌入封面，写入标题、UP 主和原视频链接，便于播放器识别与后续查找来源。 |
+| **音频转 MP3** | 在上游音频处理流程上扩展 M4A／FLAC 转 MP3，保留启用的封面与标签。 |
+| **WebDAV 存储** | 先在本地下载并完成媒体处理，再上传成品及选定的附加文件；支持远程目录、同名处理和上传成功后的本地清理。 |
+| **按源保存下载选项** | 同步源可独立保存画质、音频、附加内容、命名选择和本地路径，后台任务使用创建时确定的选项。 |
 
-当前提供两种下载方式，可按使用场景选择：
+多线程下载、断点续传、网络错误重试、多类型解析、章节、字幕、命名编辑器等基础能力继续沿用上游。音频标签、音频封面和远程存储需要自行启用；默认使用本地存储。
 
-- [**GitHub Releases**](https://github.com/ScottSloan/Bili23-Downloader/releases/latest) - 适合访问 GitHub 较稳定的用户，获取最新发布版本。
-- [**官网下载（国内用户推荐）**](https://bili23.scott-sloan.cn/doc/releases.html) - 适合国内用户，通常访问更快、更稳定。
+## 下载与更新
 
-## 🪧 使用协议
-本项目仅供个人学习与研究用途，下载内容**仅限于个人非商业使用，严禁用于任何形式的商业目的、公开传播或分发**。  
-本软件仅基于用户账号的合法访问权限操作，**不会绕过任何付费墙或平台知识产权保护措施**。请勿将本软件用于批量抓取或任何违反目标平台服务条款的行为。  
+**[前往本仓库 Releases 下载增强版 →](https://github.com/SakuraChiyo0v0/Bilibili-Downloader-plus/releases)**
 
-**免责声明**：用户需完全自行承担使用本项目可能带来的所有风险（包括但不限于账号封禁、版权纠纷等）。项目开发者不对任何人因使用或无法使用本软件所引发的任何直接或间接法律纠纷、损害承担责任。  
+- 按自己的操作系统选择该次发布提供的安装包或便携包；平台覆盖以 Release 附件为准。
+- 新增强版使用 `上游版本+plus.修订号`，例如 `2.20.0+plus.1`；历史发布可能尚未采用后缀。
+- 应用内“检查更新”检查本仓库的增强版发布，支持同一上游版本下的 Plus 修订更新。
+- 上游安装包请从[上游 Releases](https://github.com/ScottSloan/Bili23-Downloader/releases)获取；它们不包含本仓库的全部增强功能。
 
-继续使用即表示您已充分理解并同意遵守上述全部条款。
+| 示例 | 含义 |
+| --- | --- |
+| `2.20.0+plus.1` | 基于上游 2.20.0 的第 1 次 Plus 修订 |
+| `2.20.0+plus.2` | 仍基于 2.20.0，更新 Plus 功能或修复 |
+| `2.21.0+plus.1` | 跟随上游 2.21.0 后重新开始 Plus 修订编号；仅为命名示例 |
 
-## 🔑 开源许可
-本项目在 **GPLv3 License** 许可协议下进行发布。
+升级遵循上游配置迁移逻辑：**从旧版本升级至 2.20.0 时，命名规则会重置，需要重新设置。** 升级前建议保留重要配置；已有下载文件不属于命名规则重置范围。
 
-wbi 签名、部分接口以及 buvid3 等参数生成参考 [SocialSisterYi/bilibili-API-collect](https://github.com/SocialSisterYi/bilibili-API-collect)  
+## 使用增强功能
 
-## 🛠️ 参与贡献
-欢迎提出新的点子~
+### 持续同步
 
-<a href="https://github.com/ScottSloan/Bili23-Downloader/graphs/contributors" target="_blank">
-    <img src="https://contrib.rocks/image?repo=ScottSloan/Bili23-Downloader" alt="Contributors" style="width: 300px;"/>
-</a>
+有两种入口，首次行为不同：
 
-Made with [contrib.rocks](https://contrib.rocks).
+1. **下载并同步**：先解析收藏夹、合集或番剧，选择需要下载的条目，再选择“下载并同步”。所选内容会先创建下载任务，并保存同步源。
+2. **手动添加同步源**：在“同步”页面添加链接并编辑下载选项。当前内容会作为已知基线保存，**不会立即下载已有全部内容**；后续检查再处理新增条目。
 
-## 🌟 社区交流
-加入社区，获取项目最新动态、问题答疑和技术交流。
+程序运行期间每 **30 分钟**检查一次已启用的同步源，也可在同步页面立即检查、停用、删除或修改选项。程序关闭后不会继续执行同步。创建失败的条目保留重试机会，不会因为一次错误而被当作已经处理。
 
-- [QQ 交流群](https://qm.qq.com/q/KX3uJIFIYK)
-- [QQ 频道](https://pd.qq.com/s/8941to1p0)
+同步是新增内容的下载，不会把远端删除操作映射为本地删除。
 
-> 如需提问，请提供**问题描述**、**完整日志**，以便我们更好地提供帮助。
+### 音频整理
 
-## 💪 支持作者
+1. 在下载选项中选择只下载音频，需要时开启“音频转 MP3”。
+2. 在设置的封面区域开启“下载封面”，选择 JPG／PNG 等支持嵌入的格式，再开启“嵌入音频封面”；标题和 UP 主标签、视频链接标签可分别在元数据区域开启。
+3. 按需要选择嵌入后是否删除原封面文件。
 
-本项目由开发者 [Scott Sloan](https://github.com/ScottSloan) 利用业余时间独立开发与维护，初衷是为大家提供纯粹、无广告且高效的 B 站本地下载工具。
+输出格式决定标签的保存方式：**MP4／M4A 同时嵌入封面时，来源链接写入标准 `comment` 标签**，以保留封面；其他支持的路径使用 `video_url`。标签和封面的展示方式取决于播放器。
 
-> **⭐️ 点亮星标**  
-> 如果这款工具为你节省了宝贵的时间，欢迎在项目右上角为其点亮一颗 **Star**！  
-> 你的支持能让更多有需要的人看到这个项目，这也会成为作者持续更新的最大动力。
+### WebDAV
 
-### ☕️ 请作者喝杯咖啡
+1. 在“设置 → 下载”的存储区域选择 **WebDAV**。
+2. 配置服务器地址、账号、密码和远程根路径，使用“测试连接”检查访问情况。
+3. 选择本地缓存目录、同名文件处理方式，以及是否在上传成功后清理本地文件。
+4. 正常创建下载任务；媒体处理完成后会显示上传进度，上传成功才记为完成。
 
-除了日常的代码维护外，处理复杂的跨平台环境以及重构发布都耗费了大量的时间与精力。如果软件确实帮你解决了不少麻烦，欢迎通过下方的赞助码请作者喝杯咖啡。**这是对“为爱发电”最实在的认可！**
+WebDAV 仍需要本地空间完成下载与媒体处理。上传失败会保留本地成品，重试时直接上传；程序在上传中退出后，下次启动等待手动重试。
 
-<p align="center">
-    <img src="https://bili23.scott-sloan.cn/assets/sponsor_weixin.Bqpdl-if.png" alt="赞助二维码" style="width: 300px; margin: 10px 0; border-radius: 8px;" />
-</p>
+**已知限制：** 一项任务包含多个文件时，如果部分文件已上传、其余失败，整任务重试可能在“自动重命名”策略下生成远端重复文件。当前不提供逐文件断点续传。
+
+## 问题反馈与贡献
+
+请优先在[本仓库 Issues](https://github.com/SakuraChiyo0v0/Bilibili-Downloader-plus/issues)反馈 Plus 使用问题。涉及上游共性问题时，先确认是否能在相同基础版本的上游复现，再向上游提供精简复现步骤。
+
+反馈时请附上：
+
+- 完整版本号，例如 `2.20.0+plus.1`，以及操作系统；源码运行还请提供 commit。
+- 相关选项、复现步骤、预期结果与实际结果。
+- 必要的日志片段或截图；删除 Cookie、令牌、密码及私有服务器地址后再上传。
+
+欢迎修复、测试与文档改进。提交增强功能时，请说明与上游行为的关系，并尽量复用上游已有流程。开发环境、测试和打包方式见 [BUILD.md](BUILD.md)。
+
+## 开源许可与使用范围
+
+项目代码遵循 [GNU GPL v3](LICENSE)。下载内容仅限个人学习、研究和非商业使用，请遵守内容授权与平台规则；程序不会绕过账号本身的访问权限或付费限制。使用者需自行承担使用产生的风险。
+
+保留并感谢以下项目的贡献与来源说明：
+
+- **[Bili23-Downloader](https://github.com/ScottSloan/Bili23-Downloader)** — 上游项目与主要作者 Scott Sloan。欢迎为上游点亮 Star，或通过[上游支持入口](https://bili23.scott-sloan.cn/doc/about.html)支持作者。
+- **[bilibili-API-collect](https://github.com/SocialSisterYi/bilibili-API-collect)** — B 站接口与签名相关参考。
+- **[PyStand](https://github.com/skywind3000/PyStand)** — Windows 启动器来源，遵循其 MIT 许可；上游定制说明见 [launcher/README.md](launcher/README.md)。

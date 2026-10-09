@@ -1,8 +1,7 @@
 from ...common.translator import Translator
 from ...common.enum import MetadataType
-from ...common._json import json_dumps
-from ...common.config import config
-from ...sync.options import get_task_option
+from ...common._json import dumps
+from ...download.task.options import resolve
 
 from ...network.request import SyncNetWorkRequest, ResponseType
 from ...download.task.info import TaskInfo
@@ -20,9 +19,7 @@ class MetadataParser(AdditionalParserBase):
         super().__init__(task_info)
 
     def parse(self):
-        metadata_type = self._metadata_type()
-
-        match metadata_type:
+        match resolve(self.task_info, "metadata_type"):
             case MetadataType.NFO:
                 if self.task_info.Episode.attribute & Attribute.VIDEO_BIT != 0:
                     # 投稿视频需要额外获取 tag 和 category 信息
@@ -34,14 +31,6 @@ class MetadataParser(AdditionalParserBase):
                 contents = self._to_json()
 
                 self._write(contents, suffix = "json", name = self.task_info.File.name, qualifier = [Translator.ADDITIONAL_FILES_QUALIFIER("METADATA")])
-
-    def _metadata_type(self):
-        value = get_task_option(self.task_info, "metadata_type", config.get(config.metadata_type))
-
-        if isinstance(value, MetadataType):
-            return value
-
-        return MetadataType(value)
 
     def _to_nfo(self):
         contents_list = MetadataNFO(self.task_info).generate()
@@ -62,7 +51,7 @@ class MetadataParser(AdditionalParserBase):
         # 过滤掉空值
         filtered_data = {k: v for k, v in data.items() if v not in [None, "", [], {}, 0]}
 
-        return json_dumps(filtered_data, indent = 2)
+        return dumps(filtered_data, indent = 2)
 
     def _save_poster(self):
         path = Path(self.task_info.File.download_path, self.task_info.File.folder, "poster.jpg")

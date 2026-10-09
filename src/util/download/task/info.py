@@ -36,7 +36,14 @@ class FileInfo(InfoBase):
 
     relative_files: list[str] = field(default_factory = list)
     additional_files: list[str] = field(default_factory = list)
+    # 兼容旧 fork 任务；新任务的存储策略固化在 Options 中。
     storage_type: str = ""
+    upload_pending: bool = False
+
+    # 待嵌入的字幕轨（含弹幕轨），由附加内容解析阶段登记，Merger 据此拼接 FFmpeg 命令
+    # 每项为 {"file": 相对文件名, "title": 轨道标题, "language": 语言码, "kind": "danmaku" | "subtitle"}
+    # 文件名中带有随界面语言变化的限定词和语言后缀，Merger 无法自行反推，因此必须在此登记
+    subtitle_track_list: list[dict] = field(default_factory = list)
 
 @dataclass
 class EpisodeInfo(InfoBase):
@@ -56,8 +63,8 @@ class EpisodeInfo(InfoBase):
     episode_number: int = 0
 
     leaf_title: str = ""
-    part_title: str = ""
     parent_title: str = ""
+    source_title: str = ""
     section_title: str = ""
     collection_title: str = ""
     series_title: str = ""
@@ -93,6 +100,12 @@ class EpisodeInfo(InfoBase):
     space_owner: str = ""
     space_owner_id: int = 0
 
+    # 会员购商城课程
+    course_id: int = 0
+    lesson_id: int = 0
+    item_id: int = 0
+    section_id: int = 0
+
     # 其他
     video_quality: str = ""
     audio_quality: str = ""
@@ -122,23 +135,6 @@ class DownloadInfo(InfoBase):
     # 合并相关
     merge_video_audio: bool = False
     keep_original_files: bool = False
-    keep_original_files_type: int = -1
-
-    # 任务级下载设置快照
-    video_container: str = ""
-    m4a_to_mp3: int = -1
-    cover_type: str = ""
-    attach_cover: int = -1
-    attach_cover_audio: int = -1
-    cleanup_cover_after_attach: int = -1
-    auto_tag: int = -1
-    write_video_url_tag: int = -1
-    danmaku_type: str = ""
-    danmaku_style: dict = field(default_factory = dict)
-    subtitle_type: str = ""
-    subtitle_language: dict = field(default_factory = dict)
-    subtitle_style: dict = field(default_factory = dict)
-    metadata_type: str = ""
 
     video_parts_count: int = 0
 
@@ -147,11 +143,79 @@ class DownloadInfo(InfoBase):
     status_label: str = ""
 
 @dataclass
+class OptionsInfo(InfoBase):
+    """
+    下载选项快照
+
+    这些选项原先要到下载过程中才去读全局设置，于是任务在队列里排队期间，
+    用户改了设置就会波及还没开始的旧任务 —— 与 download_path「建任务时即
+    固定」的设计意图相矛盾。改为在生成 TaskInfo 时一并固化。
+
+    全部默认为 None，表示这条记录没有固化过该项：旧版本创建的任务反序列化
+    后就是这个状态，读取时回落到全局设置，行为与升级前一致。**不要改成具体
+    的默认值** —— 那会让旧任务用上硬编码的值，而不是用户自己的设置。
+
+    枚举一律存 value（字符串）以保证 JSON 可序列化，读取时再转回枚举，
+    取值与转换统一收敛在 options.py 的 resolve() 里。
+    """
+    video_container: str = None
+
+    danmaku_type: str = None
+    danmaku_style: dict = None
+    embed_danmaku: bool = None
+    delete_danmaku_after_embed: bool = None
+
+    subtitle_type: str = None
+    embed_subtitle: bool = None
+    delete_subtitle_after_embed: bool = None
+    subtitle_language: dict = None
+    subtitle_style: dict = None
+
+    cover_type: str = None
+    attach_cover: bool = None
+    attach_cover_audio: bool = None
+    delete_cover_after_attach: bool = None
+
+    metadata_type: str = None
+
+    m4a_to_mp3: bool = None
+    auto_tag: bool = None
+    write_video_url_tag: bool = None
+    storage_type: str = None
+    cleanup_after_upload: bool = None
+
+    keep_original_files_type: int = None
+
+@dataclass
+class NamingInfo(InfoBase):
+    """
+    命名规则快照
+
+    runtime.naming.target_rule_ids 是进程级全局，每次解析都会被重置，而下载
+    开始之后 _update_media_info() 还要拿画质信息再格式化一次文件名 —— 那时
+    读到的可能已经是别的任务选的规则了：任务 A 选了规则 X 进队列排队，用户
+    接着解析视频 B 并选了规则 Y，A 真正开始下载时文件名会按 Y 重算。
+    与 OptionsInfo 同理，在生成 TaskInfo 时就固化。
+
+    存的是**模板字符串本身**而不是 rule_id：用户完全可能在任务排队期间编辑
+    或删掉这条规则，只存 id 等于没固化。rule_id 仅作溯源信息保留。
+
+    全部默认为 None，表示这条记录没有固化过命名规则：旧版本创建的任务反序列化
+    后就是这个状态，读取时回落到按 type_id 查该类型的默认规则，行为与升级前
+    一致。**不要改成具体的默认值**。
+    """
+    rule_id: str = None
+    rule: str = None
+    type_id: int = None
+
+@dataclass
 class TaskInfo:
     Basic: BasicInfo = field(default_factory = BasicInfo)
     File: FileInfo = field(default_factory = FileInfo)
     Episode: EpisodeInfo = field(default_factory = EpisodeInfo)
     Download: DownloadInfo = field(default_factory = DownloadInfo)
+    Options: OptionsInfo = field(default_factory = OptionsInfo)
+    Naming: NamingInfo = field(default_factory = NamingInfo)
 
     def to_dict(self):
         return asdict(self)
@@ -161,8 +225,28 @@ class TaskInfo:
         file_data = data.get("File", {})
         episode_data = data.get("Episode", {})
         download_data = data.get("Download", {})
+        # 旧版本的记录里没有 Options，取到空 dict，各项保持 None 即回落全局设置
+        options_data = dict(data.get("Options") or {})
+        # 旧 fork 曾把快照存进 Download，空串/-1/空字典是未指定的哨兵值。
+        # 只迁移有效值；显式的新 Options（包括 False）始终优先。
+        for name in _field_names(OptionsInfo):
+            legacy_name = "cleanup_cover_after_attach" if name == "delete_cover_after_attach" else name
+            value = download_data.get(legacy_name)
+            if name == "storage_type":
+                value = file_data.get("storage_type")
+                if value not in ("local", "webdav"):
+                    value = None
+            if options_data.get(name) is None and value not in (None, "", -1, {}):
+                options_data[name] = value
+        # 上游旧任务只有本地交付语义，升级后不能因当前全局选择 WebDAV 而上传并清理。
+        if options_data.get("storage_type") is None:
+            options_data["storage_type"] = "local"
+        # Naming 同理：旧任务没有固化过命名规则，回落到按 type_id 查默认规则
+        naming_data = data.get("Naming", {})
 
         self.Basic.from_dict(basic_data)
         self.File.from_dict(file_data)
         self.Episode.from_dict(episode_data)
         self.Download.from_dict(download_data)
+        self.Options.from_dict(options_data)
+        self.Naming.from_dict(naming_data)

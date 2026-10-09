@@ -1,4 +1,7 @@
-from datetime import datetime
+from datetime import datetime, timedelta
+
+
+_EPOCH = datetime(1970, 1, 1)
 
 
 def _normalize_timestamp(timestamp: int | float):
@@ -7,18 +10,42 @@ def _normalize_timestamp(timestamp: int | float):
 
     return timestamp
 
+
+def _normalize_datetime(time: datetime):
+    if time.tzinfo is None:
+        return time
+
+    return time.replace(tzinfo = None)
+
+
 class Time:
     @staticmethod
     def format_timestamp(timestamp: int, fmt: str = "%Y-%m-%d %H:%M:%S"):
-        return datetime.fromtimestamp(_normalize_timestamp(timestamp)).strftime(fmt)
+        return Time.from_timestamp(timestamp).strftime(fmt)
     
     @staticmethod
     def from_timestamp(timestamp: int):
-        return datetime.fromtimestamp(_normalize_timestamp(timestamp))
+        timestamp = _normalize_timestamp(timestamp)
+
+        try:
+            return datetime.fromtimestamp(timestamp)
+        except (OSError, OverflowError, ValueError):
+            return _EPOCH + timedelta(seconds=timestamp)
     
     @staticmethod
     def from_string(time_str: str, fmt: str = "%Y-%m-%d %H:%M:%S"):
         return datetime.strptime(time_str, fmt)
+
+    @staticmethod
+    def to_timestamp(time: datetime):
+        try:
+            return time.timestamp()
+        except (OSError, OverflowError, ValueError):
+            return (_normalize_datetime(time) - _EPOCH).total_seconds()
+
+    @staticmethod
+    def timestamp_from_string(time_str: str, fmt: str = "%Y-%m-%d %H:%M:%S"):
+        return Time.to_timestamp(Time.from_string(time_str, fmt))
     
     @staticmethod
     def format_srt_time(seconds: float):

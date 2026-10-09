@@ -1,20 +1,30 @@
 from PySide6.QtCore import QObject, Slot, Signal
 
-from ...network.request import RequestType, ResponseType, SyncNetWorkRequest
+from ...network.request import SyncNetWorkRequest
+from ...network.download_url import resolve_download_url
 from ...common.enum import MediaType
-from ...network.cdn import CDN
+
+from ..quality import fetch_video_streams
 
 from .info import PreviewerInfo
+
+import re
 
 class QueryInfoWorker(QObject):
     success = Signal(dict, object)
     error = Signal(str)
     finished = Signal()
+    # 补取一次会连带返回同一组的多个档位，整批带回去并入映射表，
+    # 用户接着切到同组的其它档位时就不必再请求一次
+    supplement_ready = Signal(list)
 
-    def __init__(self, media_info: dict):
+    def __init__(self, media_info: dict, supplement: tuple = None):
         super().__init__()
 
         self.media_info = media_info
+        # 该档位的视频流不在首次响应里时，这里带着 (quality_id, codec_id)，
+        # 先补取流再查文件大小，补到的流随 success 信号回到 GUI 线程并入 video_info_map
+        self.supplement = supplement
         self.file_size = 0
         self.break_flag = False
 
@@ -23,6 +33,9 @@ class QueryInfoWorker(QObject):
         try:
             match MediaType(PreviewerInfo.media_type):
                 case MediaType.DASH:
+                    if self.supplement:
+                        self.supplement_video_stream()
+
                     self.query_dash_file_size()
 
                 case MediaType.MP4 | MediaType.FLV:
@@ -43,6 +56,21 @@ class QueryInfoWorker(QObject):
         finally:
             self.finished.emit()
 
+    def supplement_video_stream(self):
+        quality_id, codec_id = self.supplement
+
+        stream_list = fetch_video_streams(PreviewerInfo.bvid, PreviewerInfo.cid, quality_id)
+
+        matched = [entry for entry in stream_list if entry.get("id") == quality_id]
+
+        if not matched:
+            raise RuntimeError("无法获取该清晰度的视频流")
+
+        self.supplement_ready.emit(stream_list)
+
+        # 优先取用户选定的编码，该档位没有这个编码时退回第一个可用的
+        self.media_info = next((entry for entry in matched if entry.get("codecid") == codec_id), matched[0]).copy()
+
     def query_dash_file_size(self):
         download_urls = self.get_download_urls(self.media_info)
 
@@ -54,36 +82,10 @@ class QueryInfoWorker(QObject):
         self.get_mp4_file_size(query_url)
 
     def get_dash_file_size(self, download_urls: list):
-        download_urls = CDN.get_url_list(download_urls)
+        result = resolve_download_url(download_urls, min_file_size = 10240)
+        self.file_size = result["file_size"]
 
-        for url in download_urls:
-            try:
-                request = SyncNetWorkRequest(url, request_type = RequestType.HEAD, response_type = ResponseType.HEADERS, raise_for_status = True)
-                response = request.run()
-            except:
-                # 请求失败，继续尝试下一个链接
-                continue
-            
-            content_length = response.get("Content-Length")
-            content_type = response.get("Content-Type")
-
-            if content_type is None or "text" in content_type:
-                # 链接不可用
-                continue
-            
-            if content_length is None or not str(content_length).isdigit():
-                # 无法获取有效的文件大小
-                continue
-
-            self.file_size = int(content_length)
-
-            if self.file_size <= 10240:
-                # 如果文件极小（例如某些 CDN 拦截时返回的 1KB 左右错误文本），视为无效链接跳过
-                continue
-
-            break
-
-        return int(content_length)
+        return self.file_size
 
     def get_mp4_file_size(self, query_url: str):
         request = SyncNetWorkRequest(query_url)
@@ -108,10 +110,11 @@ class QueryInfoWorker(QObject):
         return download_urls
 
     def get_query_url(self, quality_id: int):
+        # 按正则替换而不是匹配固定的 qn=80：预览请求的档位会变，
+        # 写死字面量会在请求档位调整后悄悄失效
         query_url: str = PreviewerInfo.info_data.get("query_url")
-        query_url = query_url.replace("qn=80", f"qn={quality_id}")
 
-        return query_url
+        return re.sub(r"([?&])qn=\d+", rf"\g<1>qn={quality_id}", query_url)
 
     def get_durl_list(self, response: dict):
         match PreviewerInfo.info_data.get("parser_type"):
@@ -123,4 +126,3 @@ class QueryInfoWorker(QObject):
 
             case "cheese":
                 return response["data"]["durl"]
-            

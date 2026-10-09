@@ -27,18 +27,34 @@ class AdditionalParserBase(ParserBase):
         else:
             name_parts = name
 
-        file_name = f"{name_parts}.{suffix}"
-        path = self.__base_path / file_name
+        path = self.__base_path / f"{name_parts}.{suffix}"
         path.parent.mkdir(parents = True, exist_ok = True)
 
         with open(path, mode, encoding = encoding) as f:
             f.write(contents)
 
         self._update_file_size(path)
+        # 统一登记最终附件，WebDAV 上传沿用上游解析结果；章节中间文件不走 _write。
+        if path.name not in self.task_info.File.additional_files:
+            self.task_info.File.additional_files.append(path.name)
 
-        # 记录附加文件用于后续上传
-        if file_name not in self.task_info.File.additional_files:
-            self.task_info.File.additional_files.append(file_name)
+        return path.name
+
+    @staticmethod
+    def is_embed_available(task_info: TaskInfo):
+        # 只有 MKV 原生支持 ASS 字幕轨，MP4 无法容纳
+        # merge_file_ext 仅在存在合并步骤时才会被赋值，因此这一个判断同时覆盖了
+        # 「输出容器为 MKV」与「存在 FFmpeg 合并步骤」两个前提
+        return task_info.File.merge_file_ext == "mkv"
+
+    def _add_subtitle_track(self, file_name: str, title: str, language: str = "", kind: str = "subtitle"):
+        # 登记待嵌入的字幕轨，Merger 在合并阶段据此拼接 FFmpeg 命令
+        self.task_info.File.subtitle_track_list.append({
+            "file": file_name,
+            "title": title,
+            "language": language,
+            "kind": kind
+        })
 
     def _update_file_size(self, path: Path):
         if path.exists():

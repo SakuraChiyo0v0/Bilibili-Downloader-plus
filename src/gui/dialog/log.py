@@ -3,7 +3,8 @@ from PySide6.QtWidgets import QHBoxLayout, QVBoxLayout
 from qfluentwidgets import ComboBox, LineEdit, PushButton
 
 from gui.component.log_list.list_view import LogListView
-from gui.component.widget import TipLabel, ToolButton
+from gui.component.widget.button import ToolButton
+from gui.component.widget.label import TipCaptionLabel
 from gui.component.dialog import FluentWidget
 
 from util.common.icon import ExtendedFluentIcon
@@ -23,7 +24,7 @@ LOG_PATTERN = re.compile(
 
 class LogViewerDialog(FluentWidget):
     def __init__(self, parent = None):
-        super().__init__(parent = parent)
+        super().__init__(parent_window = parent)
 
         self.setWindowTitle(self.tr("Logs"))
         self.setMinimumSize(800, 520)
@@ -57,7 +58,7 @@ class LogViewerDialog(FluentWidget):
 
         self.log_list = LogListView(self)
 
-        tip_label = TipLabel(
+        tip_label = TipCaptionLabel(
             self.tr("Tips: Click on a log entry to view details, right-click to copy"), self
         )
 

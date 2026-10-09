@@ -1,8 +1,8 @@
 blank_issues_enabled: false
 contact_links:
-  - name: ❓提出问题
-    url: https://github.com/ScottSloan/Bili23-Downloader/discussions
-    about: 提问项目相关的其他问题
-  - name: 📄官方文档
+  - name: 📘 增强版使用说明
+    url: https://github.com/SakuraChiyo0v0/Bilibili-Downloader-plus#readme
+    about: 同步下载、音频标签与 WebDAV 的使用方式和已知限制。
+  - name: 📄 上游基础功能文档
     url: https://bili23.scott-sloan.cn/
-    about: 在创建 Issue 之前，请仔细查阅 Bili23 Downloader 使用手册以确保正确使用。
+    about: Bili23 Downloader 的登录、解析、画质、字幕和命名规则等通用说明。

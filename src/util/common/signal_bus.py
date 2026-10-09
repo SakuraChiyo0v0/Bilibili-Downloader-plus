@@ -1,7 +1,7 @@
 from PySide6.QtCore import Signal, QObject
 
 from .enum import ToastNotificationCategory
-from .config import config
+from .runtime import runtime
 
 from threading import Lock
 
@@ -18,7 +18,14 @@ class SignalBus:
         update_parse_list = Signal(str, str, object, object)
         update_parse_list_count = Signal(str, int)
 
-        preview_init = Signal(dict, bool)
+        # 自动解析、互动视频探查等场景下，向已有的解析列表追加节点。
+        # 解析线程不得直接改动解析列表所使用的树，只能通过本信号把新节点交给 GUI 线程挂载
+        append_parse_list_nodes = Signal(object)
+
+        # 按顺序尝试的媒体信息预览候选项。首选项取不到媒体信息（多为充电专属、付费等
+        # 无权限的视频）时自动换下一个，全部失败才提示用户。
+        # 用户手动指定某一项时只传该项，失败即提示
+        preview_init = Signal(list, bool)
         preview_finish = Signal()
 
         query_video_info = Signal(int, int, object)
@@ -34,8 +41,9 @@ class SignalBus:
         show_interactive_video_dialog = Signal(dict)
 
     class Download(QObject):
-        create_task = Signal(list)
-        create_task_with_options = Signal(list, object)
+        # 第三个参数为本次任务的下载选项覆盖，传 None 表示全部沿用全局设置。
+        # 用 object 而非 dict，以便直接传 None
+        create_task = Signal(list, bool, object)
 
         show_duplicate_download_dialog = Signal(object, object, object)
         show_skip_duplicate_download_toast = Signal(str)
@@ -92,21 +100,21 @@ class SignalBus:
         self._lock = Lock() # 用于保护待发送列表的线程锁
 
     def emit_signal(self, signal, *args, **kwargs):
-        if config.main_window_ready:
+        if runtime.app.main_window_ready:
             # 初始化完成，直接发送信号
             signal.emit(*args, **kwargs)
         else:
             # 否则加入待发送列表。使用线程锁保证多线程安全
             with self._lock:
                 # 双重检查，防止在获取锁的过程中主窗口已初始化完成
-                if config.main_window_ready:
+                if runtime.app.main_window_ready:
                     signal.emit(*args, **kwargs)
                 else:
                     self.pending_signals.append((signal, args, kwargs))
 
     def emit_pending_signals(self):
         # 主窗口初始化完成后调用，发送所有待发送的信号
-        config.main_window_ready = True
+        runtime.app.main_window_ready = True
 
         with self._lock:
             for signal, args, kwargs in self.pending_signals:

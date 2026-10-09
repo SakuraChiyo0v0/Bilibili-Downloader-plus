@@ -18,6 +18,7 @@ class ExtendedFluentIcon(FluentIconBase, Enum):
     SELECT = "select"
     RENAME = "rename"
     SERVER = "server"
+    REMOVE = "remove"
     COMMENT = "comment"
     OPTIONS = "options"
     NUMBERS = "numbers"
@@ -26,6 +27,7 @@ class ExtendedFluentIcon(FluentIconBase, Enum):
     SUBTITLES = "subtitles"
     TEST_CUBE = "test_cube"
     CLIPBOARD = "clipboard"
+    EDIT_BLACK = "edit_black"
     AUTOMATION = "automation"
     SELECT_ALL = "select_all"
     CHOOSE_PAGE = "choose_page"
@@ -33,6 +35,7 @@ class ExtendedFluentIcon(FluentIconBase, Enum):
     FILE_SETTINGS = "file_settings"
     FAST_DOWNLOAD = "fast_download"
     SINGLE_CHOICE = "single_choice"
+    FORWARD_BUTTON = "forward_button"
     APPLICATION_WINDOW = "application_window"
     DOUBLE_RIGHT_ARROWS = "double_right_arrows"
 

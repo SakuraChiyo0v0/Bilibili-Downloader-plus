@@ -3,8 +3,8 @@
 ; Non-commercial use only
 
 #define MyAppName "Bili23 Downloader"
-#define MyAppVersion "2.10.4"
-#define MyAppVersionName "2.10.4"
+#define MyAppVersion "2.20.0"
+#define MyAppVersionName "2.20.0+plus.1"
 #define MyAppPublisher "Scott Sloan"
 #define MyAppURL "https://bili23.scott-sloan.cn"
 #define MyAppExeName "Bili23.exe"
@@ -15,7 +15,7 @@
 AppId={{B096F0C1-D105-4EF9-86E1-5E87DA884EA4}
 AppName={#MyAppName}
 AppVersion={#MyAppVersion}
-;AppVerName={#MyAppName} {#MyAppVersion}
+AppVerName={#MyAppName} {#MyAppVersionName}
 AppPublisher={#MyAppPublisher}
 AppPublisherURL={#MyAppURL}
 AppSupportURL={#MyAppURL}
@@ -24,6 +24,13 @@ AppCopyright=Copyright (C) 2022-2026 Scott Sloan
 AppMutex=B096F0C1-D105-4EF9-86E1-5E87DA884EA4
 DefaultDirName={autopf}\{#MyAppName}
 UninstallDisplayIcon={app}\{#MyAppExeName}
+; 卸载程序随安装包编译嵌入，签安装包签不到它。由 CI 通过 /DSignedUninstallerDir= 传入目录：
+; 首次编译在该目录生成未签名的 uninst-*.e32 后中止，签好名再编译即嵌入已签名的版本。
+; 本地直接编译不传此定义，照旧生成未签名的卸载程序。
+#ifdef SignedUninstallerDir
+SignedUninstaller=yes
+SignedUninstallerDir={#SignedUninstallerDir}
+#endif
 ; "ArchitecturesAllowed=x64compatible" specifies that Setup cannot run
 ; on anything but x64 and Windows 11 on Arm.
 ArchitecturesAllowed=x64compatible
@@ -63,11 +70,11 @@ zh_TW.UninstallAppRunningError=解除安裝程式偵測到 Bili23 Downloader 正
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
 
 [Files]
+; 源码现在嵌在 exe 的资源段里，磁盘上既没有 script\ 目录，也没有入口脚本
+; _pystand_static.int —— 留着一行就会因为找不到源文件而让 ISCC 直接报错
 Source: ".\Bili23-Downloader\{#MyAppExeName}"; DestDir: "{app}"; Flags: ignoreversion
 Source: ".\Bili23-Downloader\LICENSE"; DestDir: "{app}"; Flags: ignoreversion
-Source: ".\Bili23-Downloader\_pystand_static.int"; DestDir: "{app}"; Flags: ignoreversion
 Source: ".\Bili23-Downloader\bundle\*"; DestDir: "{app}\bundle"; Flags: ignoreversion recursesubdirs createallsubdirs
-Source: ".\Bili23-Downloader\script\*"; DestDir: "{app}\script"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: ".\Bili23-Downloader\runtime\*"; DestDir: "{app}\runtime"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: ".\Bili23-Downloader\site-packages\*"; DestDir: "{app}\site-packages"; Flags: ignoreversion recursesubdirs createallsubdirs
 ; NOTE: Don't use "Flags: ignoreversion" on any shared system files
@@ -77,9 +84,7 @@ Name: "{autoprograms}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; WorkingD
 Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon; WorkingDir: {app}
 
 [Run]
-; Keep post-install launch in the original user session. If the installer is elevated and
-; the app inherits that token, per-user drives such as subst M: or rclone/FUSE Z: may disappear.
-Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}"; Flags: nowait postinstall skipifsilent runasoriginaluser
+Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}"; Flags: nowait postinstall skipifsilent runascurrentuser
 
 [UninstallDelete]
 Type: filesandordirs; Name: "{app}"

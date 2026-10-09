@@ -1,11 +1,15 @@
+from typing import List
+
+
 class FFmpegCommand:
     def __init__(self):
         self.inputs = []
         self.outputs = []
         self.params = []
 
-    def add_input(self, input_path: str):
-        self.inputs.append(input_path)
+    def add_input(self, input_path: str, *options: str):
+        # options 为该路输入的前置参数，如 -f concat，统一走此处以保证输入索引可靠
+        self.inputs.append((list(options), input_path))
 
         return self
 
@@ -19,11 +23,90 @@ class FFmpegCommand:
 
         return self
 
+    def allow_unofficial(self):
+        # 杜比视界的配置记录在 MP4 中以 dvcC / dvvC box 承载，这两个 box 属于杜比自家规范而非
+        # ISO 标准，FFmpeg 在默认合规级别下会直接跳过并给出
+        # "Not writing 'dvcC'/'dvvC' box. Requires -strict unofficial." 的提示，
+        # 导致封装后的文件虽然仍带 RPU，却因缺少配置记录而不再被识别为杜比视界
+        #
+        # MKV 走的是 BlockAdditionMapping，本就不受此限制，加上该参数也没有副作用，
+        # 因此所有封装流程统一带上，避免按容器分支
+        return self.add_param("-strict", "unofficial")
+
+    def add_cover(self, cover_path: str, *maps: str):
+        # 将封面作为附加视频流嵌入，maps 为各路流的映射关系
+        self.add_input(cover_path)
+
+        for map_param in maps:
+            self.add_param("-map", map_param)
+
+        return (
+            self
+            .add_param("-c:v:1", "png")
+            .add_param("-disposition:v:1", "attached_pic")
+            .add_param("-pix_fmt:v:1", "rgba")
+        )
+
+    def add_subtitles(self, subtitle_list: List[dict]):
+        # 将 ASS 弹幕/字幕作为独立字幕轨嵌入，仅 MKV 容器支持
+        #
+        # 调用前必须保证主视频流与音频流已经显式 -map：只要命令中出现任意一个 -map，
+        # FFmpeg 的默认流选择就会失效，此时不显式映射主流会导致输出文件里只剩字幕
+        for index, entry in enumerate(subtitle_list):
+            input_index = len(self.inputs)
+
+            self.add_input(entry["file"])
+            self.add_param("-map", f"{input_index}:s:0")
+
+            if title := entry.get("title"):
+                self.add_param(f"-metadata:s:s:{index}", f"title={title}")
+
+            if language := entry.get("language"):
+                self.add_param(f"-metadata:s:s:{index}", f"language={language}")
+
+            # 每条轨都要显式给出 disposition：不指定时 FFmpeg 会自动把第一条字幕轨标记为
+            # default，弹幕轨一旦落到首位就会变成打开视频即自动显示
+            self.add_param(f"-disposition:s:{index}", "default" if entry.get("default") else "0")
+
+        return self.add_param("-c:s", "copy")
+
+    def add_chapter(self, chapter_path: str):
+        # 将 ffmetadata 格式的章节文件作为额外输入写入最终文件
+        # MKV 原生支持章节；MP4 由 FFmpeg 同时写入 Nero chpl 与 QuickTime 章节轨，两者命令一致
+        # 此处只指定 -map_chapters，不使用 -map_metadata，否则全局元数据会被章节文件覆盖
+        index = len(self.inputs)
+
+        # ffmetadata 输入不含任何流，不会影响封面等 -map 参数的流映射
+        self.add_input(chapter_path, "-f", "ffmetadata")
+
+        return self.add_param("-map_chapters", str(index))
+
+    def add_metadata(self, metadata: dict | None, output_path: str = "", has_cover: bool = False):
+        mov_container = output_path.rsplit(".", 1)[-1].lower() in {"mp4", "m4a", "mov", "m4v"}
+        for key, value in (metadata or {}).items():
+            # MOV 的 mdta 与封面 covr 不能由 FFmpeg 同时写出：use_metadata_tags
+            # 会静默丢掉 attached_pic。存在封面时将原链接放进标准 comment 标签。
+            if key == "video_url" and mov_container and has_cover:
+                key = "comment"
+            self.add_param("-metadata", f"{key}={value}")
+        # MOV/MP4 默认只保存有限的预定义字段，video_url 需使用 mdta 标签。
+        if metadata and "video_url" in metadata and mov_container and not has_cover:
+            self.add_param("-movflags", "+use_metadata_tags")
+        return self
+
+    def add_audio_cover(self, cover_path: str):
+        input_index = len(self.inputs)
+        self.add_input(cover_path)
+        return (self.add_param("-map", "0:a:0")
+                .add_param("-map", f"{input_index}:v:0")
+                .add_param("-c:v", "mjpeg")
+                .add_param("-disposition:v:0", "attached_pic"))
+
     def build(self):
         command = ["ffmpeg", "-y"]
 
-        for input_path in self.inputs:
-            command.extend(["-i", input_path])
+        for options, input_path in self.inputs:
+            command.extend([*options, "-i", input_path])
 
         command.extend(self.params)
 
@@ -31,138 +114,95 @@ class FFmpegCommand:
             command.append(output_path)
 
         return command
-
-    @staticmethod
-    def _add_metadata(cmd, metadata: dict = None, output_path: str = ""):
-        if not metadata:
-            return cmd
-
-        for key, value in metadata.items():
-            cmd.add_param("-metadata", f"{key}={value}")
-
-        suffix = output_path.rsplit(".", 1)[-1].lower() if "." in output_path else ""
-        if "video_url" in metadata and suffix in {"mp4", "m4a", "mov", "m4v"}:
-            cmd.add_param("-movflags", "use_metadata_tags")
-
-        return cmd
     
     @classmethod
-    def merge_video_audio(cls, video_path: str, audio_path: str, output_path: str, cover_path: str = None, metadata: dict = None):
-        if cover_path:
-            cmd = (
-                cls()
-                .add_input(video_path)
-                .add_input(audio_path)
-                .add_input(cover_path)
-                .add_param("-map", "0:v:0")
-                .add_param("-map", "1:a:0")
-                .add_param("-map", "2:v:0")
-                .add_param("-c:v", "copy")
-                .add_param("-c:a", "copy")
-                .add_param("-c:v:1", "mjpeg")
-                .add_param("-disposition:v:1", "attached_pic")
-                .add_param("-pix_fmt:v:1", "yuvj420p")
-            )
-        else:
-            cmd = (
-                cls()
-                .add_input(video_path)
-                .add_input(audio_path)
-                .add_param("-c:v", "copy")
-                .add_param("-c:a", "copy")
-            )
-        
-        cls._add_metadata(cmd, metadata, output_path)
+    def merge_video_audio(cls, video_path: str, audio_path: str, output_path: str, cover_path: str = None, chapter_path: str = None, subtitle_list: List[dict] = None, metadata: dict = None):
+        command = (
+            cls()
+            .add_input(video_path)
+            .add_input(audio_path)
+            .add_param("-c:v", "copy")
+            .add_param("-c:a", "copy")
+            .allow_unofficial()
+        )
 
-        return cmd.add_output(output_path)
-    
-    @classmethod
-    def merge_video_parts(cls, lists_path: str, output_path: str, cover_path: str = None, metadata: dict = None):
         if cover_path:
-            cmd = (
-                cls()
-                .add_input(cover_path)
-                .add_param("-f", "concat")
-                .add_param("-safe", "0")
-                .add_param("-i", lists_path)
-                .add_param("-c:v", "copy")
-                .add_param("-c:a", "copy")
-                .add_param("-map", "1:v:0")
-                .add_param("-map", "0:v:0")
-                .add_param("-c:v:1", "mjpeg")
-                .add_param("-disposition:v:1", "attached_pic")
-                .add_param("-pix_fmt:v:1", "yuvj420p")
-            )
-        else:
-            cmd = (
-                cls()
-                .add_param("-f", "concat")
-                .add_param("-safe", "0")
-                .add_param("-i", lists_path)
-                .add_param("-c:v", "copy")
-                .add_param("-c:a", "copy")
-            )
-        
-        cls._add_metadata(cmd, metadata, output_path)
+            # 封面为第三路输入，索引为 2
+            command.add_cover(cover_path, "0:v:0", "1:a:0", "2:v:0")
 
-        return cmd.add_output(output_path)
+        elif subtitle_list:
+            # 没有封面时主流本来靠 FFmpeg 的默认选择，而字幕轨的 -map 会让默认选择失效，
+            # 因此这里必须把主流一并显式映射
+            command.add_param("-map", "0:v:0").add_param("-map", "1:a:0")
+
+        # 字幕输入必须排在封面之后：add_cover 的流映射里写死了封面的输入索引
+        if subtitle_list:
+            command.add_subtitles(subtitle_list)
+
+        if chapter_path:
+            command.add_chapter(chapter_path)
+
+        return command.add_metadata(metadata, output_path, bool(cover_path)).add_output(output_path)
 
     @classmethod
-    def convert_audio_to_mp3(cls, input_path: str, output_path: str, cover_path: str = None, metadata: dict = None):
-        if cover_path:
-            cmd = (
-                cls()
-                .add_input(input_path)
-                .add_input(cover_path)
-                .add_param("-map", "0:a:0")
-                .add_param("-map", "1:v:0")
-                .add_param("-c:a", "libmp3lame")
-                .add_param("-q:a", "2")
-                .add_param("-c:v:0", "mjpeg")
-                .add_param("-disposition:v:0", "attached_pic")
-                .add_param("-id3v2_version", "3")
-            )
-        else:
-            cmd = (
-                cls()
-                .add_input(input_path)
-                .add_param("-c:a", "libmp3lame")
-                .add_param("-q:a", "2")
-            )
-        
-        cls._add_metadata(cmd, metadata, output_path)
+    def merge_video_parts(cls, lists_path: str, output_path: str, cover_path: str = None, chapter_path: str = None, subtitle_list: List[dict] = None, metadata: dict = None):
+        command = (
+            cls()
+            .add_input(lists_path, "-f", "concat", "-safe", "0")
+            .add_param("-c:v", "copy")
+            .add_param("-c:a", "copy")
+            .allow_unofficial()
+        )
 
-        return cmd.add_output(output_path)
+        if cover_path:
+            # 分片视频为第一路输入，封面为第二路输入
+            # 音频用可选映射（0:a?），避免显式 -map 之后音轨被丢弃，同时兼容没有音轨的分片
+            command.add_cover(cover_path, "0:v:0", "0:a?", "1:v:0")
+
+        elif subtitle_list:
+            # 同 merge_video_audio，字幕轨的 -map 会让默认流选择失效，主流必须显式映射
+            command.add_param("-map", "0:v:0").add_param("-map", "0:a?")
+
+        if subtitle_list:
+            command.add_subtitles(subtitle_list)
+
+        if chapter_path:
+            command.add_chapter(chapter_path)
+
+        return command.add_metadata(metadata, output_path, bool(cover_path)).add_output(output_path)
 
     @classmethod
     def convert_m4a_to_mp3(cls, input_path: str, output_path: str, cover_path: str = None, metadata: dict = None):
-        return cls.convert_audio_to_mp3(input_path, output_path, cover_path, metadata)
+        command = (
+            cls()
+            .add_input(input_path)
+            .add_param("-c:a", "libmp3lame")
+            .add_param("-q:a", "2")
+        )
+        if cover_path:
+            command.add_audio_cover(cover_path)
+        return command.add_metadata(metadata, output_path, bool(cover_path)).add_output(output_path)
     
     @classmethod
-    def fix_mp4_box(cls, input_path: str, output_path: str):
-        return (
+    def remux_audio(cls, input_path: str, output_path: str, cover_path: str = None, metadata: dict = None):
+        # 把独立音频流重新封装进标准容器
+        #
+        # B 站的 DASH 独立音频流是 fMP4 **分片**容器：ftyp + moov（不含采样表）+
+        # sidx + [moof + mdat] × N，采样描述在 moof 里按片重复。这套结构是给流式播放
+        # 准备的，只有 VLC/PotPlayer 这类宽容的解复用器愿意读，foobar2000 等严格解析器
+        # 会直接拒绝打开（array access out of range）。而 .m4a/.flac/.ec3 这三个扩展名
+        # 都是向播放器承诺「标准容器」的，只改扩展名交付等于递了个假承诺
+        #
+        # -c copy 只重写容器、不重编码，27 分钟音轨实测约 0.19 秒
+        # -movflags +faststart 把 moov 前置；非 mov 系容器（flac、ec3）下 FFmpeg 会静默
+        # 忽略它，因此三种扩展名可以共用同一条命令，无需按扩展名分支
+        command = (
             cls()
             .add_input(input_path)
             .add_param("-c", "copy")
             .add_param("-movflags", "+faststart")
-            .add_output(output_path)
+            .allow_unofficial()
         )
-
-    @classmethod
-    def write_audio_metadata(cls, input_path: str, output_path: str, cover_path: str = None, metadata: dict = None):
-        cmd = cls().add_input(input_path).add_param("-map", "0:a:0").add_param("-c:a", "copy")
-
         if cover_path:
-            cmd.add_input(cover_path)
-            cmd.add_param("-map", "1:v:0")
-            cmd.add_param("-c:v:0", "mjpeg")
-            cmd.add_param("-disposition:v:0", "attached_pic")
-            cmd.add_param("-pix_fmt:v:0", "yuvj420p")
-        
-        cls._add_metadata(cmd, metadata, output_path)
-
-        return cmd.add_output(output_path)
-
-    @classmethod
-    def attach_cover_to_m4a(cls, input_path: str, output_path: str, cover_path: str, metadata: dict = None):
-        return cls.write_audio_metadata(input_path, output_path, cover_path, metadata)
+            command.add_audio_cover(cover_path)
+        return command.add_metadata(metadata, output_path, bool(cover_path)).add_output(output_path)

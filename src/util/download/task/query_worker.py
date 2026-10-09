@@ -47,6 +47,10 @@ class QueryWorker(QObject):
 
         for task_info in task_info_list:
             if update_status:
+                if task_info.Download.status == DownloadStatus.UPLOADING:
+                    # 上传中断后由用户重试，从已保存的成品继续上传，不自动联网或重下。
+                    task_info.Download.status = DownloadStatus.FFMPEG_FAILED
+
                 if task_info.Download.status in [DownloadStatus.QUEUED, DownloadStatus.DOWNLOADING, DownloadStatus.PARSING]:
                     task_info.Download.status = DownloadStatus.PAUSED
 

@@ -1,5 +1,5 @@
 from ..common.config import config
-from ..common.enum import StorageType
+from ..common.enum import StorageType, ProxyMode
 from ..network.proxy import Proxy
 
 from .provider import StorageProvider
@@ -9,8 +9,9 @@ from .webdav import WebDAVStorageProvider
 
 class StorageProviderFactory:
     @staticmethod
-    def create_from_config() -> StorageProvider:
-        storage_type = config.get(config.storage_type)
+    def create_from_config(storage_type: StorageType | str | None = None) -> StorageProvider:
+        # 存储方式由任务固化；凭据仍只读取设置，不写入任务数据库。
+        storage_type = StorageType(storage_type if storage_type is not None else config.get(config.storage_type))
 
         if storage_type == StorageType.WEBDAV:
             return WebDAVStorageProvider(
@@ -19,7 +20,8 @@ class StorageProviderFactory:
                 password=config.get(config.webdav_password),
                 base_path=config.get(config.webdav_base_path),
                 verify_ssl=config.get(config.webdav_verify_ssl),
-                proxies=Proxy().get_proxies() if config.get(config.proxy_enabled) else None,
+                proxies=Proxy().get_proxies(),
+                trust_env=config.get(config.proxy_mode) == ProxyMode.SYSTEM,
             )
 
         return LocalStorageProvider()
@@ -34,5 +36,7 @@ class StorageProviderFactory:
             password=password if password is not None else config.get(config.webdav_password),
             base_path=base_path if base_path is not None else config.get(config.webdav_base_path),
             verify_ssl=verify_ssl,
-            proxies=proxies,
+            # 设置页的连接测试与实际上传使用同一代理模式。
+            proxies=proxies if proxies is not None else Proxy().get_proxies(),
+            trust_env=proxies is None and config.get(config.proxy_mode) == ProxyMode.SYSTEM,
         )

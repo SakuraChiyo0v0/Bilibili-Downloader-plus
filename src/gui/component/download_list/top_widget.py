@@ -1,13 +1,12 @@
-from PySide6.QtWidgets import QStackedWidget, QWidget, QHBoxLayout, QGridLayout
-from PySide6.QtGui import QPainter, QColor, QPen
+from PySide6.QtWidgets import QStackedWidget, QWidget, QHBoxLayout, QGridLayout, QButtonGroup
 from PySide6.QtCore import Signal
 
 from qfluentwidgets import (
-    PrimaryPushButton, PushButton, FluentIcon, FlyoutViewBase, BodyLabel, ComboBox, Flyout, FlyoutAnimationType,
-    isDarkTheme
+    PrimaryPushButton, PushButton, FluentIcon, FlyoutViewBase, BodyLabel, ComboBox, Flyout, FlyoutAnimationType
 )
 
-from gui.component.widget import ToolButton
+from gui.component.widget.button import ToolButton
+from gui.component.widget.separator import Separator
 
 from util.common.icon import ExtendedFluentIcon
 from util.common.io.directory import Directory
@@ -17,13 +16,16 @@ from util.common.config import config
 class SortFlyoutWidget(FlyoutViewBase):
     closed = Signal()
 
-    def __init__(self, parent = None, sort_by_key_dict: dict = None, trigger_signal_func = None, sort_by_key = None):
+    def __init__(
+        self, parent = None, sort_by_key_dict: dict = None,
+        trigger_signal_func = None, sort_by_key = None, ascending = True
+    ):
         super().__init__(parent)
 
         self.sort_by_key_dict = sort_by_key_dict
         self.trigger_signal_func = trigger_signal_func
         self.sort_by_key = sort_by_key
-        self.ascending = True
+        self.ascending = ascending
 
         self.init_UI()
 
@@ -43,6 +45,16 @@ class SortFlyoutWidget(FlyoutViewBase):
         self.sort_ascending_btn.setToolTip(self.tr("Ascending"))
         self.sort_descending_btn = ToolButton(ExtendedFluentIcon.SORT_REVERSE, self)
         self.sort_descending_btn.setToolTip(self.tr("Descending"))
+
+        self.sort_direction_group = QButtonGroup(self)
+        self.sort_direction_group.setExclusive(True)
+        self.sort_direction_group.addButton(self.sort_ascending_btn)
+        self.sort_direction_group.addButton(self.sort_descending_btn)
+
+        self.sort_ascending_btn.setCheckable(True)
+        self.sort_descending_btn.setCheckable(True)
+        self.sort_ascending_btn.setChecked(self.ascending)
+        self.sort_descending_btn.setChecked(not self.ascending)
 
         sort_direction_layout = QHBoxLayout()
         sort_direction_layout.setContentsMargins(0, 0, 0, 0)
@@ -96,28 +108,6 @@ class FilterFlyoutWidget(FlyoutViewBase):
     def init_UI(self):
         pass
 
-class Separator(QWidget):
-    def __init__(self, parent = None):
-        super().__init__(parent = parent)
-
-        self.setFixedWidth(5)
-
-        self.setContentsMargins(10, 5, 10, 5)
-
-        self.update()
-
-    def paintEvent(self, e):
-        painter = QPainter(self)
-
-        c = 255 if isDarkTheme() else 0
-
-        pen = QPen(QColor(c, c, c, 50))
-        pen.setCosmetic(True)
-
-        painter.setPen(pen)
-
-        painter.drawLine(2, 0, 2, self.height())
-
 class TopStackedWidget(QStackedWidget):
     def __init__(self, parent = None):
         super().__init__(parent)
@@ -135,7 +125,10 @@ class TopStackedWidget(QStackedWidget):
         self.sort_downloading_list_btn = ToolButton(ExtendedFluentIcon.SORT, self)
         self.sort_downloading_list_btn.setToolTip(self.tr("Sort"))
 
-        separator_1 = Separator(self)
+        self.open_folder_1_btn = ToolButton(FluentIcon.FOLDER, self)
+        self.open_folder_1_btn.setToolTip(self.tr("Open Download Directory"))
+
+        separator_1 = Separator(self, alpha = 50)
 
         self.start_all_btn = PrimaryPushButton(FluentIcon.PLAY, self.tr("Start All"), self)
         self.pause_all_btn = PushButton(FluentIcon.PAUSE, self.tr("Pause All"), self)
@@ -145,6 +138,7 @@ class TopStackedWidget(QStackedWidget):
         downloading_layout.setContentsMargins(0, 0, 0, 0)
         downloading_layout.addStretch()
         downloading_layout.addWidget(self.sort_downloading_list_btn)
+        downloading_layout.addWidget(self.open_folder_1_btn)
         downloading_layout.addWidget(separator_1)
         downloading_layout.addWidget(self.start_all_btn)
         downloading_layout.addWidget(self.pause_all_btn)
@@ -156,10 +150,11 @@ class TopStackedWidget(QStackedWidget):
         self.sort_completed_list_btn = ToolButton(ExtendedFluentIcon.SORT, self)
         self.sort_completed_list_btn.setToolTip(self.tr("Sort"))
 
-        separator_2 = Separator(self)
+        self.open_folder_2_btn = ToolButton(FluentIcon.FOLDER, self)
+        self.open_folder_2_btn.setToolTip(self.tr("Open Download Directory"))
 
-        self.open_directory_btn = PushButton(FluentIcon.FOLDER, self.tr("Open Directory"), self)
-        self.open_directory_btn.setMinimumWidth(110)
+        separator_2 = Separator(self, alpha = 50)
+
         self.clear_all_btn = PushButton(ExtendedFluentIcon.CLEAR, self.tr("Clear All"))
         self.clear_all_btn.setMinimumWidth(110)
 
@@ -167,8 +162,8 @@ class TopStackedWidget(QStackedWidget):
         completed_layout.setContentsMargins(0, 0, 0, 0)
         completed_layout.addStretch()
         completed_layout.addWidget(self.sort_completed_list_btn)
+        completed_layout.addWidget(self.open_folder_2_btn)
         completed_layout.addWidget(separator_2)
-        completed_layout.addWidget(self.open_directory_btn)
         completed_layout.addWidget(self.clear_all_btn)
 
         self.addWidget(downloading_widget)
@@ -177,7 +172,8 @@ class TopStackedWidget(QStackedWidget):
         self.connect_signals()
 
     def connect_signals(self):
-        self.open_directory_btn.clicked.connect(self.on_open_directory)
+        self.open_folder_1_btn.clicked.connect(self.on_open_download_directory)
+        self.open_folder_2_btn.clicked.connect(self.on_open_download_directory)
 
         self.sort_downloading_list_btn.clicked.connect(self.on_show_downloading_list_sort_flyout)
         self.sort_completed_list_btn.clicked.connect(self.on_show_completed_list_sort_flyout)
@@ -194,6 +190,7 @@ class TopStackedWidget(QStackedWidget):
             sort_by_key_dict,
             signal_bus.download.sort_downloading_list.emit,
             self.download_interface.downloading_list_view.sort_by_key,
+            self.download_interface.downloading_list_view.sort_ascending,
             self.sort_downloading_list_btn
         )
 
@@ -208,11 +205,12 @@ class TopStackedWidget(QStackedWidget):
             sort_by_key_dict,
             signal_bus.download.sort_completed_list.emit,
             self.download_interface.completed_list_view.sort_by_key,
+            self.download_interface.completed_list_view.sort_ascending,
             self.sort_completed_list_btn
         )
 
-    def _show_sort_flyout(self, sort_by_key_dict, trigger_signal_func, sort_by_key, target):
-        view = SortFlyoutWidget(self, sort_by_key_dict, trigger_signal_func, sort_by_key)
+    def _show_sort_flyout(self, sort_by_key_dict, trigger_signal_func, sort_by_key, ascending, target):
+        view = SortFlyoutWidget(self, sort_by_key_dict, trigger_signal_func, sort_by_key, ascending)
 
         flyout = Flyout.make(
             view = view,
@@ -224,5 +222,5 @@ class TopStackedWidget(QStackedWidget):
 
         view.closed.connect(flyout.fadeOut)
 
-    def on_open_directory(self):    
+    def on_open_download_directory(self):    
         Directory.open_directory_in_explorer(config.get(config.download_path))

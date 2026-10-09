@@ -1,3 +1,4 @@
+from ....common.translator import Translator
 from ....download.task.info import TaskInfo
 from ....format.time import Time
 
@@ -74,10 +75,10 @@ class MetadataNFO:
             contents_list.append({
                 "contents": self._generate_video(),
                 "name": self.task_info.File.name,
-                "qualifier": ["元数据"]
+                "qualifier": [Translator.ADDITIONAL_FILES_QUALIFIER("METADATA")]
             })
 
-        if attr & Attribute.BANGUMI_BIT != 0 or attr & Attribute.CHEESE_BIT != 0:
+        if attr & Attribute.BANGUMI_BIT != 0 or attr & Attribute.CHEESE_BIT != 0 or attr & Attribute.LESSON_BIT != 0:
             # 确保 tvshow.nfo 不重复生成
             if not self._is_tvshow_exists():
                 contents_list.append({

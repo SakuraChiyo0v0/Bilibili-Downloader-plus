@@ -2,227 +2,84 @@ from copy import deepcopy
 from contextlib import contextmanager
 
 from ..common.config import config
-from ..common.enum import (
-    CoverType,
-    DanmakuType,
-    MetadataType,
-    NumberingType,
-    StorageType,
-    SubtitleType,
-    VideoContainer,
+from ..common.enum import ConventionType, NumberingType, StorageType
+from ..common.runtime import runtime
+from ..download.task.options import _OPTION_SPEC, snapshot
+
+
+_MEDIA_OPTIONS = (
+    "download_video_stream", "download_audio_stream", "merge_video_audio",
+    "keep_original_files", "download_danmaku", "download_subtitle",
+    "download_cover", "download_metadata", "embed_chapter", "download_path",
 )
+_QUALITY_OPTIONS = ("video_quality_id", "audio_quality_id", "video_codec_id")
+_NUMBER_OPTIONS = ("current_starting_number", "global_starting_number")
 
 
-def _enum_value(value):
-    return getattr(value, "value", value)
+def normalize_options(options: dict | None) -> dict:
+    """兼容旧源快照，规则 ID 失效时交给上游按内容类型回落默认规则。"""
+    result = deepcopy(options or {})
+    if result.get("delete_cover_after_attach") is None and "cleanup_cover_after_attach" in result:
+        result["delete_cover_after_attach"] = result["cleanup_cover_after_attach"]
+    result.pop("cleanup_cover_after_attach", None)
+    result.pop("target_naming_rule_id", None)
+    rule_ids = {}
+    for key, value in (result.get("naming_rule_ids") or {}).items():
+        try:
+            rule_ids[str(int(ConventionType(int(key))))] = value
+        except (ValueError, TypeError):
+            continue
+    result["naming_rule_ids"] = rule_ids
+    return result
 
 
 def capture_download_options() -> dict:
-    return {
-        "version": 1,
-        "video_quality_id": config.video_quality_id,
-        "audio_quality_id": config.audio_quality_id,
-        "video_codec_id": config.video_codec_id,
-        "download_video_stream": config.download_video_stream,
-        "download_audio_stream": config.download_audio_stream,
-        "merge_video_audio": config.merge_video_audio,
-        "keep_original_files": config.keep_original_files,
-        "keep_original_files_type": config.keep_original_files_type,
-        "download_path": config.get(config.download_path),
-        "storage_type": _enum_value(config.get(config.storage_type)),
-        "target_naming_rule_id": config.target_naming_rule_id,
-        "naming_rule_ids": deepcopy(config.get(config.download_option_naming_rule_ids) or {}),
-        "numbering_type": _enum_value(config.get(config.numbering_type)),
-        "current_starting_number": config.current_starting_number or 1,
-        "global_starting_number": config.global_starting_number,
-        "download_danmaku": config.get(config.download_danmaku),
-        "danmaku_type": _enum_value(config.get(config.danmaku_type)),
-        "danmaku_style": deepcopy(config.get(config.danmaku_style)),
-        "download_subtitle": config.get(config.download_subtitle),
-        "subtitle_type": _enum_value(config.get(config.subtitle_type)),
-        "subtitle_language": deepcopy(config.get(config.subtitle_language)),
-        "subtitle_style": deepcopy(config.get(config.subtitle_style)),
-        "download_cover": config.get(config.download_cover),
-        "cover_type": _enum_value(config.get(config.cover_type)),
-        "attach_cover": config.get(config.attach_cover),
-        "attach_cover_audio": config.get(config.attach_cover_audio),
-        "cleanup_cover_after_attach": config.get(config.cleanup_cover_after_attach),
-        "download_metadata": config.get(config.download_metadata),
-        "metadata_type": _enum_value(config.get(config.metadata_type)),
-        "auto_tag": config.get(config.auto_tag),
-        "write_video_url_tag": config.get(config.write_video_url_tag),
-        "video_container": _enum_value(config.get(config.video_container)),
-        "m4a_to_mp3": config.get(config.m4a_to_mp3),
-    }
-
-
-_ENUM_OPTION_MAP = {
-    "storage_type": StorageType,
-    "numbering_type": NumberingType,
-    "danmaku_type": DanmakuType,
-    "subtitle_type": SubtitleType,
-    "cover_type": CoverType,
-    "metadata_type": MetadataType,
-    "video_container": VideoContainer,
-}
-
-
-_CONFIG_OPTION_MAP = {
-    "video_quality_id": "download_option_video_quality_id",
-    "audio_quality_id": "download_option_audio_quality_id",
-    "video_codec_id": "download_option_video_codec_id",
-    "download_video_stream": "download_option_video_stream",
-    "download_audio_stream": "download_option_audio_stream",
-    "merge_video_audio": "download_option_merge_video_audio",
-    "keep_original_files": "download_option_keep_original_files",
-    "keep_original_files_type": "download_option_keep_original_files_type",
-    "download_path": "download_path",
-    "storage_type": "storage_type",
-    "naming_rule_ids": "download_option_naming_rule_ids",
-    "numbering_type": "numbering_type",
-    "download_danmaku": "download_danmaku",
-    "danmaku_type": "danmaku_type",
-    "danmaku_style": "danmaku_style",
-    "download_subtitle": "download_subtitle",
-    "subtitle_type": "subtitle_type",
-    "subtitle_language": "subtitle_language",
-    "subtitle_style": "subtitle_style",
-    "download_cover": "download_cover",
-    "cover_type": "cover_type",
-    "attach_cover": "attach_cover",
-    "attach_cover_audio": "attach_cover_audio",
-    "cleanup_cover_after_attach": "cleanup_cover_after_attach",
-    "download_metadata": "download_metadata",
-    "metadata_type": "metadata_type",
-    "auto_tag": "auto_tag",
-    "write_video_url_tag": "write_video_url_tag",
-    "video_container": "video_container",
-    "m4a_to_mp3": "m4a_to_mp3",
-}
-
-
-_RUNTIME_OPTION_NAMES = [
-    "video_quality_id",
-    "audio_quality_id",
-    "video_codec_id",
-    "download_video_stream",
-    "download_audio_stream",
-    "merge_video_audio",
-    "keep_original_files",
-    "keep_original_files_type",
-    "target_naming_rule_id",
-    "current_starting_number",
-    "global_starting_number",
-]
-
-
-_EXTRA_CONFIG_ITEM_NAMES = [
-    "show_download_options_dialog",
-    "local_temp_path",
-]
-
-
-def _enum_option(key: str, value):
-    enum_type = _ENUM_OPTION_MAP.get(key)
-
-    if enum_type and not isinstance(value, enum_type):
-        return enum_type(value)
-
-    return value
-
-
-def _set_config_option(key: str, value):
-    config_item_name = _CONFIG_OPTION_MAP.get(key)
-
-    if not config_item_name:
-        return
-
-    config.set(getattr(config, config_item_name), _enum_option(key, deepcopy(value)))
+    result = snapshot()
+    result.update({key: deepcopy(config.get(getattr(config, key))) for key in _MEDIA_OPTIONS})
+    result.update({key: getattr(runtime.download, key) for key in _QUALITY_OPTIONS})
+    result.update({key: getattr(runtime.naming, key) for key in _NUMBER_OPTIONS})
+    result["numbering_type"] = config.get(config.numbering_type).value
+    result["naming_rule_ids"] = {str(int(key)): value for key, value in runtime.naming.target_rule_ids.items()}
+    result["version"] = 2
+    if result["storage_type"] == StorageType.WEBDAV.value:
+        result["download_path"] = config.get(config.local_temp_path) or result["download_path"]
+    return result
 
 
 def apply_download_options(options: dict | None):
-    if not options:
-        return
-
-    for name in _RUNTIME_OPTION_NAMES:
-        if name in options:
-            setattr(config, name, deepcopy(options[name]))
-
-    for key, value in options.items():
-        _set_config_option(key, value)
-
-
-def _capture_dialog_config_state():
-    state = capture_download_options()
-
-    for name in _EXTRA_CONFIG_ITEM_NAMES:
-        state[name] = deepcopy(config.get(getattr(config, name)))
-
-    return state
-
-
-def _restore_dialog_config_state(state: dict):
-    apply_download_options(state)
-
-    for name in _EXTRA_CONFIG_ITEM_NAMES:
-        if name in state:
-            config.set(getattr(config, name), deepcopy(state[name]))
+    options = normalize_options(options)
+    for key in (*_MEDIA_OPTIONS, *_OPTION_SPEC, "numbering_type"):
+        if options.get(key) is None:
+            continue
+        value = deepcopy(options[key])
+        enum_type = NumberingType if key == "numbering_type" else _OPTION_SPEC.get(key)
+        if enum_type is not None:
+            value = enum_type(value)
+        config.set(getattr(config, key), value)
+    for key in _QUALITY_OPTIONS:
+        if options.get(key) is not None:
+            setattr(runtime.download, key, options[key])
+    for key in _NUMBER_OPTIONS:
+        if key in options:
+            setattr(runtime.naming, key, options[key])
+    runtime.naming.target_rule_ids = {ConventionType(int(key)): value for key, value in options["naming_rule_ids"].items()}
 
 
 @contextmanager
 def scoped_download_options(options: dict | None):
-    original = _capture_dialog_config_state()
-
+    """仅供 GUI 编辑同步源选项；后台建任务直接传 options，不改全局状态。"""
+    original = capture_download_options()
+    original["download_path"] = config.get(config.download_path)
+    extras = {
+        name: deepcopy(config.get(getattr(config, name)))
+        for name in ("show_download_options_dialog", "local_temp_path")
+    }
     try:
         apply_download_options(options)
+        # 源选项已保存最终本地路径，源对话框只编辑这一处。
+        config.set(config.local_temp_path, "")
         yield
     finally:
-        _restore_dialog_config_state(original)
-
-
-def get_option(options: dict | None, key: str, default=None):
-    if options and key in options:
-        return options[key]
-
-    return default
-
-
-def get_task_option(task_info, key: str, default=None):
-    value = getattr(task_info.Download, key, None)
-
-    if value in (None, "", -1):
-        return default
-
-    return value
-
-
-@contextmanager
-def temporary_runtime_download_options(options: dict | None):
-    if not options:
-        yield
-        return
-
-    attrs = [
-        "video_quality_id",
-        "audio_quality_id",
-        "video_codec_id",
-        "download_video_stream",
-        "download_audio_stream",
-        "merge_video_audio",
-        "keep_original_files",
-        "keep_original_files_type",
-        "target_naming_rule_id",
-        "current_starting_number",
-        "global_starting_number",
-    ]
-    original = {name: getattr(config, name) for name in attrs}
-
-    try:
-        for name in attrs:
-            if name in options:
-                setattr(config, name, options[name])
-
-        yield
-    finally:
-        for name, value in original.items():
-            setattr(config, name, value)
+        apply_download_options(original)
+        for name, value in extras.items():
+            config.set(getattr(config, name), value)

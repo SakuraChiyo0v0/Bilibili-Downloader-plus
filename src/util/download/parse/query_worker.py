@@ -1,5 +1,4 @@
-from ...network.request import RequestType, ResponseType, SyncNetWorkRequest
-from ...network.cdn import CDN
+from ...network.download_url import resolve_download_url
 
 class QueryWorker:
     def __init__(self, media_info: dict):
@@ -26,48 +25,7 @@ class QueryWorker:
         return url_list
 
     def get_file_size(self, download_urls: list):
-        _file_size = 0
-        resolved_url = ""
-        download_urls = CDN.get_url_list(download_urls)
-
-        for url in download_urls:                
-            # 发起 HEAD 请求获取文件大小
-
-            try:
-                request = SyncNetWorkRequest(url, request_type = RequestType.HEAD, response_type = ResponseType.HEADERS, raise_for_status = True)
-                response = request.run()
-
-            except Exception:
-                # 请求失败，继续尝试下一个链接 (例如 403, 404 等会被精确捕捉)
-                continue
-
-            content_length = response.get("Content-Length")
-            content_type = response.get("Content-Type")
-
-            if content_type is None or "text" in content_type:
-                # 链接不可用
-                continue
-            
-            if content_length is None or not str(content_length).isdigit():
-                # 无法获取有效的文件大小
-                continue
-
-            _file_size = int(content_length)
-
-            if _file_size <= 1024:
-                # 如果文件极小（例如某些 CDN 拦截时返回的 1KB 左右错误文本），视为无效链接跳过
-                continue
-
-            resolved_url = url
-            break
-        
-        if _file_size == 0:
-            raise RuntimeError("无法获取有效的下载链接")
-
-        return {
-            "url": resolved_url,
-            "file_size": _file_size
-        }
+        return resolve_download_url(download_urls, min_file_size = 1024)
 
     def get_download_urls(self, media_info: dict):
         download_urls = []

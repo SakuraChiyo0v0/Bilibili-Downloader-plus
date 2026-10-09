@@ -2,15 +2,17 @@ from PySide6.QtWidgets import QWidget, QVBoxLayout, QFileDialog
 from PySide6.QtCore import Qt
 
 from qfluentwidgets import (
-    ScrollArea, SettingCardGroup, PushSettingCard, ComboBoxSettingCard, MSFluentWindow, MessageBox, FluentIcon, 
-    setTheme, setThemeColor
+    SettingCardGroup, PushSettingCard, ComboBoxSettingCard, MSFluentWindow, MessageBox, FluentIcon,
+    setThemeColor
 )
 
+from gui.component.setting.storage_card import StorageSettingCard
+from gui.component.widget.scroll import ScrollArea
 from gui.component.setting import (
-    PrioritySettingCard, DanmakuSettingCard, SubtitleSettingCard, CoverSettingCard, MetadataSettingCard, CDNSettingCard, ProxySettingCard,
-    FFmpegSettingCard, NumberSettingCard, DownloadFormatCard, ParsingSettingCard, WindowBehaviorSettingCard,
+    PrioritySettingCard, DanmakuSettingCard, SubtitleSettingCard, CoverSettingCard, ChapterSettingCard, MetadataSettingCard, CDNSettingCard, ProxySettingCard,
+    FFmpegSettingCard, NumberSettingCard, DownloadFormatCard, DownloadPathSettingCard, ParsingSettingCard, WindowBehaviorSettingCard,
     DownloadHandlingSettingCard, DownloadConcurrencySettingCard, PersonalizationCard, CheckUpdateSettingCard, OtherAdvancedSettingCard,
-    StorageSettingCard
+    MCPSettingCard, MediaOptionsCard
 )
 
 from util.common.data import video_quality_map, audio_quality_map, video_codec_map
@@ -19,6 +21,11 @@ from util.common.style_sheet import StyleSheet
 from util.common.signal_bus import signal_bus
 from util.common.translator import Translator
 from util.common.config import config
+from util.common.runtime import runtime
+
+import logging
+
+logger = logging.getLogger(__name__)
 
 class SettingInterface(ScrollArea):
     def __init__(self, parent = None):
@@ -53,17 +60,20 @@ class SettingInterface(ScrollArea):
         # Download
         self.download_group = SettingCardGroup(self.tr("Download"), self)
 
+        self.download_path_card = DownloadPathSettingCard(self.main_window, save = True, parent = self)
+        self.storage_card = StorageSettingCard(self.main_window, self)
         self.download_currency_card = DownloadConcurrencySettingCard(self)
+        self.media_options_card = MediaOptionsCard(self.main_window, parent = self)
         self.priority_setting_card = PrioritySettingCard(self.main_window, parent = self)
         self.download_format_card = DownloadFormatCard(self)
-        self.storage_setting_card = StorageSettingCard(self.main_window, parent = self)
 
         # Additional
-        self.additional_group = SettingCardGroup(self.tr("Danmaku, Subtitles, Cover, and Metadata"), self)
+        self.additional_group = SettingCardGroup(self.tr("Danmaku, Subtitles, Cover, Chapters, and Metadata"), self)
 
         self.danmaku_setting_card = DanmakuSettingCard(parent = self)
         self.subtitle_setting_card = SubtitleSettingCard(parent = self)
         self.cover_setting_card = CoverSettingCard(parent = self)
+        self.chapter_setting_card = ChapterSettingCard(parent = self)
         self.metadata_setting_card = MetadataSettingCard(parent = self)
 
         # File Naming
@@ -78,8 +88,9 @@ class SettingInterface(ScrollArea):
         self.cdn_card = CDNSettingCard(self.main_window, self)
         self.ffmpeg_card = FFmpegSettingCard(self.main_window, self)
         self.proxy_card = ProxySettingCard(self)
-        self.log_card = PushSettingCard(self.tr("View Logs"), FluentIcon.BOOK_SHELF, self.tr("Logs"), self.tr("View application logs"), self)
+        self.mcp_card = MCPSettingCard(self.main_window, self)
         self.other_card = OtherAdvancedSettingCard(self.main_window, self)
+        self.log_card = PushSettingCard(self.tr("View Logs"), FluentIcon.BOOK_SHELF, self.tr("Logs"), self.tr("View application logs"), self)
 
         # Software Update
         self.update_group = SettingCardGroup(self.tr("Updates"), self)
@@ -97,15 +108,18 @@ class SettingInterface(ScrollArea):
         self.behavior_group.addSettingCard(self.download_handling_card)
 
         # Download
+        self.download_group.addSettingCard(self.download_path_card)
+        self.download_group.addSettingCard(self.storage_card)
         self.download_group.addSettingCard(self.download_currency_card)
+        self.download_group.addSettingCard(self.media_options_card)
         self.download_group.addSettingCard(self.priority_setting_card)
         self.download_group.addSettingCard(self.download_format_card)
-        self.download_group.addSettingCard(self.storage_setting_card)
 
         # Additional
         self.additional_group.addSettingCard(self.danmaku_setting_card)
         self.additional_group.addSettingCard(self.subtitle_setting_card)
         self.additional_group.addSettingCard(self.cover_setting_card)
+        self.additional_group.addSettingCard(self.chapter_setting_card)
         self.additional_group.addSettingCard(self.metadata_setting_card)
 
         # File Naming Convention
@@ -116,8 +130,9 @@ class SettingInterface(ScrollArea):
         self.advanced_group.addSettingCard(self.cdn_card)
         self.advanced_group.addSettingCard(self.ffmpeg_card)
         self.advanced_group.addSettingCard(self.proxy_card)
-        self.advanced_group.addSettingCard(self.log_card)
+        self.advanced_group.addSettingCard(self.mcp_card)
         self.advanced_group.addSettingCard(self.other_card)
+        self.advanced_group.addSettingCard(self.log_card)
 
         # Software Update
         self.update_group.addSettingCard(self.check_update_card)
@@ -145,7 +160,7 @@ class SettingInterface(ScrollArea):
 
     def connect_signals(self):
         # Interface
-        config.themeChanged.connect(setTheme)
+        # config.themeChanged -> setTheme 已在主窗口中连接，此处不再重复连接
         config.appRestartSig.connect(self.show_restart_message)
         self.personalization_card.accentColorChanged.connect(setThemeColor)
         self.personalization_card.mica_effect_switch.checkedChanged.connect(signal_bus.interface.mica_effect_changed)
@@ -158,6 +173,11 @@ class SettingInterface(ScrollArea):
 
         # Download
         self.download_currency_card.download_speed_limit_btn.clicked.connect(self.on_custom_speed_limit_settings)
+
+        # 设置界面没有「确定」按钮，媒体选项改一下立即落盘；
+        # 同一个卡片在下载选项对话框里则要等到点确定才写回
+        self.media_options_card.changed.connect(self.media_options_card.save)
+
         self.priority_setting_card.video_quality_btn.clicked.connect(self.on_adjust_video_quality_priority)
         self.priority_setting_card.audio_quality_btn.clicked.connect(self.on_adjust_audio_quality_priority)
         self.priority_setting_card.video_codec_btn.clicked.connect(self.on_adjust_video_codec_priority)
@@ -172,7 +192,9 @@ class SettingInterface(ScrollArea):
         self.cdn_card.custom_provider_btn.clicked.connect(self.on_custom_cdn_server_list)
         self.ffmpeg_card.source_choice.currentIndexChanged.connect(self.on_change_ffmpeg_source)
         self.ffmpeg_card.custom_btn.clicked.connect(self.on_change_ffmpeg_path)
+        self.proxy_card.proxy_mode_choice.currentIndexChanged.connect(self.on_change_proxy_mode)
         self.proxy_card.custom_btn.clicked.connect(self.on_custom_proxy)
+        self.mcp_card.restartRequested.connect(self.on_restart_mcp_server)
         self.log_card.clicked.connect(self.on_view_logs)
 
         # Update
@@ -258,8 +280,24 @@ class SettingInterface(ScrollArea):
     def on_custom_naming_rule(self):
         from ..dialog.setting.rule_list import RuleListDialog
 
-        dialog = RuleListDialog(self.main_window)
-        dialog.exec()
+        window = getattr(self, "_naming_rule_window", None)
+
+        if window is not None:
+            # FluentWidget 的 Qt parent 是 None，不复用的话每点一次就会开出
+            # 一个新窗口，而且调用方不持引用它还会被 GC 掉
+            window.show()
+            window.raise_()
+            window.activateWindow()
+
+            return
+
+        window = RuleListDialog(self.main_window)
+        window.enable_delete_on_close()
+        window.destroyed.connect(lambda: setattr(self, "_naming_rule_window", None))
+
+        self._naming_rule_window = window
+
+        window.show()
 
     def on_custom_cdn_server_list(self):
         from ..dialog.setting.cdn_server import CDNServerDialog
@@ -268,7 +306,7 @@ class SettingInterface(ScrollArea):
         dialog.exec()
 
     def on_change_ffmpeg_source(self, index: int):
-        if index == 0 and not config.bundle_ffmpeg_exist:
+        if index == 0 and not runtime.ffmpeg.bundle_exist:
             dialog = MessageBox(
                 self.tr("Bundled FFmpeg not found"),
                 self.tr("The bundled FFmpeg executable is missing. Please switch to 'System PATH' or specify a custom path."),
@@ -287,7 +325,7 @@ class SettingInterface(ScrollArea):
             self,
             self.tr("Select FFmpeg executable"),
             config.get(config.custom_ffmpeg_path),
-            self.tr("FFmpeg executable ({executable})").format(executable = config.ffmpeg_executable)
+            self.tr("FFmpeg executable ({executable})").format(executable = runtime.ffmpeg.executable)
         )
         
         if not file_path:
@@ -296,11 +334,35 @@ class SettingInterface(ScrollArea):
         config.set(config.custom_ffmpeg_path, file_path)
         self.ffmpeg_card.custom_group.setContent(file_path)
 
+    def on_change_proxy_mode(self, index: int):
+        # 仅手动设置模式才需要配置代理服务器
+        self.proxy_card.custom_group.setEnabled(index == 2)
+
     def on_custom_proxy(self):
         from ..dialog.setting.proxy import ProxyDialog
 
         dialog = ProxyDialog(self.main_window)
         dialog.exec()
+
+    def on_restart_mcp_server(self):
+        from util.mcp import restart_mcp_server
+
+        try:
+            restart_mcp_server()
+
+        except Exception:
+            # 端口占用等失败已记入 runtime.mcp.last_error，由状态行呈现给用户，
+            # 不能让它把设置界面一起带崩
+            logger.exception("重启 MCP 服务器失败")
+
+        self.mcp_card.update_status()
+
+        if runtime.mcp.last_error:
+            signal_bus.toast.show.emit(
+                ToastNotificationCategory.ERROR,
+                self.tr("MCP server failed to start"),
+                runtime.mcp.last_error
+            )
 
     def on_view_logs(self):
         from ..dialog.log import LogViewerDialog

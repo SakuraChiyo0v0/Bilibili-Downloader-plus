@@ -6,15 +6,19 @@ from qfluentwidgets import FluentIcon
 
 from gui.component.view_model import CoverQueryDelegateBase
 
+from util.common.enum import DownloadStatus, ToastNotificationCategory
 from util.common.icon import ExtendedFluentIcon
 from util.common.io.directory import Directory
+from util.common.signal_bus import signal_bus
 from util.common.translator import Translator
 from util.download.task.info import TaskInfo
-from util.common.enum import DownloadStatus
 from util.format.units import Units
 from util.format.time import Time
 
 from pathlib import Path
+import logging
+
+logger = logging.getLogger(__name__)
 
 class DownloadItemDelegate(CoverQueryDelegateBase):
     def __init__(self, parent = None):
@@ -130,7 +134,30 @@ class DownloadItemDelegate(CoverQueryDelegateBase):
     def openFileLocation(self, task_info: TaskInfo):
         directory = Path(task_info.File.download_path, task_info.File.folder)
 
-        Directory.open_files_in_explorer(str(directory), task_info.File.relative_files)
+        # 检查 relative_files 是否存在，如果不存在则弹出错误提示
+        existing_files = [file for file in task_info.File.relative_files if Path(directory, file).exists()]
+
+        if not existing_files:
+            # 记录第一个文件位置
+            if task_info.File.relative_files:
+                _path = Path(directory, task_info.File.relative_files[0])
+            else:
+                _path = directory
+
+            logger.error("任务 %s 的下载文件不存在，无法打开文件位置： %s", task_info.Basic.show_title, _path)
+
+            signal_bus.toast.show_long_message.emit(
+                ToastNotificationCategory.ERROR,
+                Translator.ERROR_MESSAGES("FILE_NOT_FOUND_TITLE"),
+                "{msg}\n\n{path}".format(
+                    msg = Translator.ERROR_MESSAGES("FILE_NOT_FOUND_DETAIL"),
+                    path = str(_path)
+                )
+                
+            )
+
+        else:
+            Directory.open_files_in_explorer(str(directory), task_info.File.relative_files)
 
     def isTaskCompleted(self, task_info: TaskInfo):
         return task_info.Download.status == DownloadStatus.COMPLETED
@@ -230,33 +257,43 @@ class UIData(QObject):
                 return Translator.TIP_MESSAGES("FFMPEG_QUEUED")
             
             case DownloadStatus.MERGING:
-                return Translator.TIP_MESSAGES("MERGING")
+                return self.getFFmpegStatusText(task_info, "MERGING")
             
             case DownloadStatus.ADDITIONAL_PROCESSING:
                 return task_info.Download.status_label
             
             case DownloadStatus.CONVERTING:
-                return Translator.TIP_MESSAGES("CONVERTING")
-
+                return self.getFFmpegStatusText(task_info, "CONVERTING")
+            
             case DownloadStatus.UPLOADING:
-                return "上传中…"
+                return Translator.TIP_MESSAGES("UPLOADING")
 
             case DownloadStatus.COMPLETED:
                 return Translator.TIP_MESSAGES("COMPLETED")
             
             case DownloadStatus.FAILED:
-                return Translator.ERROR_MESSAGES("DOWNLOAD_FAILED")
+                # 等待自动重试期间状态仍是 FAILED，倒计时文案挂在 status_label 上，
+                # 这样并发调度器（只认 QUEUED）完全不受影响，不必新增一个状态枚举
+                return task_info.Download.status_label or Translator.ERROR_MESSAGES("DOWNLOAD_FAILED")
             
             case DownloadStatus.FFMPEG_FAILED:
                 return Translator.ERROR_MESSAGES("FFMPEG_PROCESSING_FAILED")
             
+    def getFFmpegStatusText(self, task_info: TaskInfo, key: str):
+        # FFmpeg 要吐出第一条进度才有百分比可显示，之前（以及 copy 合并这类瞬间完成的场景）
+        # 只给文案，免得挂着一个始终停在 0% 的数字
+        if task_info.Download.progress > 0:
+            return Translator.TIP_MESSAGES(f"{key}_WITH_PROGRESS").format(progress = task_info.Download.progress)
+
+        return Translator.TIP_MESSAGES(key)
+
     def getSpeedText(self, task_info: TaskInfo):
         return Units.format_speed(task_info.Download.speed)
     
     def getSizeText(self, task_info: TaskInfo):
         if task_info.Download.total_size > 0:
 
-            if task_info.Download.status in [DownloadStatus.COMPLETED, DownloadStatus.FFMPEG_QUEUED, DownloadStatus.MERGING, DownloadStatus.CONVERTING, DownloadStatus.FFMPEG_FAILED]:
+            if task_info.Download.status in [DownloadStatus.COMPLETED, DownloadStatus.FFMPEG_QUEUED, DownloadStatus.MERGING, DownloadStatus.CONVERTING, DownloadStatus.UPLOADING, DownloadStatus.FFMPEG_FAILED]:
                 return Units.format_file_size(task_info.Download.total_size)
             else:
                 return f"{Units.format_file_size(task_info.Download.downloaded_size)} / {Units.format_file_size(task_info.Download.total_size)}"

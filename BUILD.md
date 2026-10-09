@@ -1,186 +1,66 @@
-# 构建文档
+# 构建与验证
 
-本文档说明如何在 Windows 本地从源码构建 Bili23 Downloader 安装包。流程与 `.github/workflows/publish.yml` 中的 Windows 发布任务保持一致：先准备静态 Python 运行时，再复制项目源码，最后用 Inno Setup 生成安装器。
+当前代码跟随上游 2.20.0。Windows 构建已改为将应用源码和完整性清单嵌入启动器，旧版“复制 src 到 script 目录”的 2.10.4 构建方式不再适用。
 
-## 构建产物
+## 版本与发行标签
 
-默认 Windows 10/11 x64 安装包：
+应用和 `pyproject.toml` 使用完整增强版版本，例如 `2.20.0+plus.1`。每次 Plus 修订递增后缀，跟随新的上游基础版本时从 `plus.1` 重新开始。标签使用 `v2.20.0+plus.1`；预览版可使用 `v2.21.0-rc1+plus.1`，并在 GitHub 标记为预览发布。
 
-```text
-build/windows/Bili23-Downloader_<version>_windows_x64.exe
-```
+`+plus.N` 采用 [PyPA 的本地版本标识格式](https://packaging.python.org/en/latest/specifications/version-specifiers/#local-version-identifiers)，用于区分基于同一上游版本的下游改动。
 
-可选便携版：
+发布工作流通过 `scripts/release_version.py` 校验标签与源码版本一致。`VERSION_NAME` 保留完整后缀供文件名使用，`VERSION` 为纯数字上游基础版本供平台元数据使用；RPM 将增强版修订写入 `Release`。Windows 启动器显示完整产品版本，数值资源与 manifest 使用四段数字。安装器的 `MyAppVersion` 为基础版本，`MyAppVersionName` 为完整版本。
 
-```text
-build/windows/Bili23-Downloader_<version>_windows_x64_portable.zip
-```
+Debian 包使用 `DEB_VERSION`：正式版仍为 `2.20.0+plus.1`，预览版转换为 `2.21.0~rc1+plus.1`，按 [Debian 版本排序规则](https://www.debian.org/doc/debian-policy/ch-controlfields.html#version)确保预览版先于正式版。
 
-可选 Windows 7 专用安装包：
-
-```text
-build/windows/Bili23-Downloader_<version>_windows_x64_for_win7.exe
-```
-
-## 环境要求
-
-- Windows x64
-- PowerShell 5 或更高版本
-- 7-Zip，用于生成便携版 zip
-- Inno Setup 6，用于生成安装器
-- 可访问 GitHub，用于下载静态运行时和 Inno Setup 中文语言文件
-
-如果使用 Scoop，可以这样安装工具：
+只检查元数据，不构建或发布：
 
 ```powershell
-scoop bucket add extras
-scoop install 7zip inno-setup
+& ./.venv/Scripts/python.exe scripts/release_version.py 'v2.20.0+plus.1'
 ```
 
-也可以从 Inno Setup 官网安装。只要命令行能找到 `iscc.exe` 即可验证成功：
+标签本身不会替代应用版本修改：先更新版本字段与变更记录，再由已获授权的发布流程创建发行。应用更新仅识别本仓库带 `+plus.N` 的发布，草稿和无后缀的历史版本不会成为增强版更新候选。
+
+## 源码环境
+
+项目最低要求 Python 3.11，上游质量检查使用 Python 3.11 和 3.13。请在仓库根目录建立独立环境，依赖版本以 `requirements.txt` 和 `pyproject.toml` 为准。
 
 ```powershell
-iscc.exe /?
+python -m venv .venv
+& ./.venv/Scripts/python.exe -m pip install -r requirements.txt pytest==9.1.1 ruff==0.16.7
 ```
 
-## 准备 Inno Setup 中文语言文件
+正常启动会读取并升级当前用户配置，包括上游 2.20.0 的命名规则重置。开发验证请先运行隔离测试；不要用真实账号、同步源或 WebDAV 目录做自动化测试。
 
-`assets/setup.iss` 中声明了 `zh_CN` 和 `zh_TW`，所以 Inno Setup 的 `Languages` 目录需要存在以下两个文件：
-
-- `ChineseSimplified.isl`
-- `ChineseTraditional.isl`
-
-如果 Inno Setup 通过 Scoop 安装，可以执行：
+## 自动化验证
 
 ```powershell
-$InnoRoot = "$env:USERPROFILE\scoop\apps\inno-setup\current"
-Invoke-WebRequest `
-  -Uri "https://raw.githubusercontent.com/jrsoftware/issrc/refs/heads/main/Files/Languages/ChineseSimplified.isl" `
-  -OutFile "$InnoRoot\Languages\ChineseSimplified.isl"
-Invoke-WebRequest `
-  -Uri "https://raw.githubusercontent.com/jrsoftware/issrc/refs/heads/main/Files/Languages/ChineseTraditional.isl" `
-  -OutFile "$InnoRoot\Languages\ChineseTraditional.isl"
+$env:QT_QPA_PLATFORM = 'offscreen'
+& ./.venv/Scripts/python.exe -m ruff check src test
+& ./.venv/Scripts/python.exe -m pytest
 ```
 
-如果 Inno Setup 安装在 `C:\Program Files (x86)\Inno Setup 6`，请把 `$InnoRoot` 改为该目录。写入 `Program Files` 可能需要管理员权限。
+`test/conftest.py` 在导入应用前启用 Qt 测试模式，使配置和数据库写入测试目录。该目录在每轮测试前清理，同一主机上的测试进程应串行运行。
 
-## 构建 Windows 10/11 安装包
-
-在仓库根目录执行以下脚本：
+## 翻译与资源
 
 ```powershell
-$Version = "2.10.4"
-$VersionName = "2.10.4"
-$BuildDir = Join-Path (Get-Location) "build\windows"
-$AppDir = Join-Path $BuildDir "Bili23-Downloader"
-$RuntimeZip = Join-Path $BuildDir "windows_x64_runtime.zip"
-
-New-Item -ItemType Directory -Force -Path $BuildDir | Out-Null
-
-Invoke-WebRequest `
-  -Uri "https://github.com/ScottSloan/Python-Static/releases/download/v0.1.0/windows_x64_runtime.zip" `
-  -OutFile $RuntimeZip
-
-if (Test-Path $AppDir) {
-  Remove-Item -Path $AppDir -Recurse -Force
-}
-
-Expand-Archive -Path $RuntimeZip -DestinationPath $AppDir -Force
-
-New-Item -ItemType Directory -Force -Path "$AppDir\script" | Out-Null
-Copy-Item -Path "src\*" -Destination "$AppDir\script" -Recurse -Force
-
-Copy-Item -Path "LICENSE" -Destination "$BuildDir\LICENSE" -Force
-Copy-Item -Path "assets\setup.iss" -Destination "$BuildDir\setup.iss" -Force
-
-$SetupPath = Join-Path $BuildDir "setup.iss"
-$Content = Get-Content $SetupPath -Raw
-$Content = $Content -replace '(?m)^#define\s+MyAppVersion\s+".*?"', "#define MyAppVersion `"$Version`""
-$Content = $Content -replace '(?m)^#define\s+MyAppVersionName\s+".*?"', "#define MyAppVersionName `"$VersionName`""
-[System.IO.File]::WriteAllText((Resolve-Path $SetupPath), $Content, (New-Object System.Text.UTF8Encoding($false)))
-
-& "$AppDir\runtime\python.exe" -m compileall $AppDir
-
-Push-Location $BuildDir
-iscc.exe setup.iss
-Pop-Location
+$env:PATH = "$(Join-Path $PWD '.venv/Scripts');$env:PATH"
+& ./.venv/Scripts/python.exe scripts/translate.py
+& ./.venv/Scripts/pyside6-lrelease.exe src/res/i18n/bili23.zh_CN.ts
+& ./.venv/Scripts/pyside6-lrelease.exe src/res/i18n/bili23.zh_TW.ts
+& ./.venv/Scripts/pyside6-rcc.exe src/res/resources.qrc -o src/res/resources_rc.py
 ```
 
-构建成功后，安装包会输出到：
+先翻译新增的 `.ts` 条目，再生成 `.qm` 和 `resources_rc.py`，三者应保持一致。
 
-```text
-build/windows/Bili23-Downloader_2.10.4_windows_x64.exe
-```
+## Windows 启动器
 
-## 构建便携版 zip
-
-安装包构建前后都可以生成便携版。确认 `build/windows/Bili23-Downloader` 已准备好后执行：
+构建入口为上游的 `scripts/build_release.ps1`，需要 Python、CMake、Windows C++ 编译工具，以及解压后的 Windows 静态运行时模板。当前发布流程使用 `ScottSloan/Python-Static` 的 `v0.1.9` 模板。
 
 ```powershell
-$VersionName = "2.10.4"
-Push-Location "build\windows"
-7z a -tzip -mx=9 "Bili23-Downloader_${VersionName}_windows_x64_portable.zip" ".\Bili23-Downloader\*"
-Pop-Location
+.\scripts\build_release.ps1 -RuntimeDir <已解压的运行时模板目录> -OutputDir .\release
 ```
 
-## 构建 Windows 7 专用安装包
+脚本先打包源码、生成清单，再编译 `launcher`，输出未签名的 `release/Bili23.exe`。`OutputDir` 会被重新创建，应只指定专用构建目录，不能指向源码、运行时输入或个人数据目录。
 
-Windows 7 版使用单独的静态运行时。步骤与 Windows 10/11 版相同，只需要把运行时下载地址替换为：
-
-```text
-https://github.com/ScottSloan/Python-Static/releases/download/v0.1.0/windows_x64_runtime_for_win7.zip
-```
-
-`iscc.exe setup.iss` 生成的文件名仍然是 `Bili23-Downloader_<version>_windows_x64.exe`，构建完成后重命名：
-
-```powershell
-$VersionName = "2.10.4"
-Rename-Item `
-  -Path "build\windows\Bili23-Downloader_${VersionName}_windows_x64.exe" `
-  -NewName "Bili23-Downloader_${VersionName}_windows_x64_for_win7.exe"
-```
-
-## 校验产物
-
-生成安装包后建议记录文件大小和 SHA256：
-
-```powershell
-Get-Item "build\windows\Bili23-Downloader_2.10.4_windows_x64.exe" |
-  Format-List FullName,Length,LastWriteTime
-
-Get-FileHash "build\windows\Bili23-Downloader_2.10.4_windows_x64.exe" -Algorithm SHA256 |
-  Format-List Algorithm,Hash,Path
-```
-
-## 常见问题
-
-`iscc.exe` 找不到：
-
-确认 Inno Setup 已安装，并且 `ISCC.exe` 或 Scoop shim 在 `PATH` 中。Scoop 安装后通常可以直接使用 `iscc.exe`。
-
-提示 `ChineseSimplified.isl` 或 `ChineseTraditional.isl` 找不到：
-
-按照“准备 Inno Setup 中文语言文件”下载语言文件到 Inno Setup 的 `Languages` 目录。
-
-提示 `Source file ... not found`：
-
-请确认 `iscc.exe setup.iss` 是在 `build/windows` 目录中执行。`setup.iss` 里的路径是相对当前目录的，需要同级存在 `Bili23-Downloader` 和 `LICENSE`。
-
-本机 `python` 版本不一致：
-
-构建发布包时不依赖系统 Python。请使用静态运行时自带的 `build/windows/Bili23-Downloader/runtime/python.exe` 执行 `compileall`。
-
-安装后启动程序，只能看到 `C:`，看不到 `M:`、`Z:` 等映射盘：
-
-这通常不是保存路径选择器的问题，而是 Windows 权限会话隔离导致的。安装器可能以管理员权限运行，如果安装完成后直接用管理员令牌启动 Bili23，程序就可能看不到普通用户会话里的盘符，例如 `subst M:`、rclone/FUSE 挂载的 `Z:` 或网络映射盘。
-
-`assets/setup.iss` 的 `[Run]` 必须使用 `runasoriginaluser`，不要改回 `runascurrentuser`。这样安装完成后勾选“启动程序”时，会回到原始用户会话启动，才能看到用户态映射盘。验证时请先完全退出已经被管理员权限启动的 Bili23，再从开始菜单、桌面快捷方式或安装器的完成页重新启动。
-
-## CI 发布流程
-
-完整发布流程以 `.github/workflows/publish.yml` 为准。该 workflow 会同时构建：
-
-- Windows 10/11 x64 安装版和便携版
-- Windows 7 x64 专用安装版
-- Linux amd64/arm64 便携版和 deb 包
-- macOS x86_64/aarch64 dmg 包
+安装包使用 `assets/setup.iss`。版本替换、语言包、Windows 签名以及各平台打包步骤以 `.github/workflows/publish.yml` 为准。签名依赖仓库的 `signing` 环境与相应凭据，fork 不能默认复用上游凭据。本次同步只验证源码，不执行发布流程。

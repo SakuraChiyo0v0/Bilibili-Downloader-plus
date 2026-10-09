@@ -1,0 +1,41 @@
+# 版本与用户文档验证
+
+日期：2026-10-09。工作分支：`codex/sync-upstream-2-20`，沿用上次上游合并的独立工作区。
+
+## 已完成
+
+- 中英文 README 改为增强版主体，保留上游归属、链接、许可与致谢；下载／反馈徽章和链接指向本仓库。
+- 应用、pyproject 与安装器显示版本为 `2.20.0+plus.1`；上游数值基础版本为 `2.20.0`，配置格式版本不变。
+- 增强版更新检查使用本仓库 Releases，按数字排序修订号，过滤草稿、普通上游标签和未选择的预览版。
+- Windows 启动器保留完整显示版本，数值资源为 `2.20.0.0`；macOS 数字字段使用基础版本；RPM／Debian 生成适合平台排序的字段。
+- 发布标签与源码版本不一致时预检失败；显式设置 Release 标签，避免手动工作流使用错误标签。
+- CHANGELOG 标记新版本“未发布”，BUILD 记录版本约定；反馈模板同步更新本仓库入口。
+
+## 验证结果
+
+环境：工作区独立 Python 3.11.15，沿用锁定运行依赖。
+
+| 检查 | 结果 |
+| --- | --- |
+| 全量 pytest，Qt offscreen 测试目录隔离 | 746 passed in 48.98s |
+| Ruff：src、test、scripts/release_version.py | All checks passed |
+| OpenSpec 严格校验 | 通过 |
+| 中英文 README 与 BUILD 本地链接 | 通过 |
+| 发布工作流、Issue 模板 YAML 解析 | 通过 |
+| CMake 实际执行版本生成模块 | 正式／预览／无后缀基础版本均通过 |
+| 发布脚本命令行 | 数值版本与完整后缀分离；拒绝标签与源码不一致 |
+| GitHub 更新检查 | 模拟验证固定来源、不发送 B 站 Cookie、草稿／预览过滤、跳过版本和网络错误反馈 |
+
+发布元数据示例：
+
+```text
+VERSION=2.20.0
+VERSION_NAME=2.20.0+plus.1
+IS_PRERELEASE=false
+RPM_RELEASE=1.plus.1
+DEB_VERSION=2.20.0+plus.1
+```
+
+## 边界
+
+未构建或安装完整 Windows／Linux／macOS 发行包，未运行 GitHub 发布和签名流程，未创建发行标签。本记录形成于提交前；用户随后授权推送并合入 main，最终状态以 Git 历史为准。更新检查测试没有访问生产网络；GitHub API 不可用时按既有错误入口提示，不切回上游发行。

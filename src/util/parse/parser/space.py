@@ -4,10 +4,12 @@ from ..episode.space import SpaceEpisodeParser
 from .base import ParserBase
 
 
+from urllib.parse import urlparse
 import math
+from typing import ClassVar
 
 class Data:
-    uname_map: dict[int, str] = {}
+    uname_map: ClassVar[dict[int, str]] = {}
 
 class SpaceParser(ParserBase):
     def __init__(self):
@@ -16,7 +18,8 @@ class SpaceParser(ParserBase):
         self.ps = 40
 
     def get_mid(self):
-        mid = self.find_str(r"/([0-9]+)", self.url)
+        # 只在路径部分匹配，避免链接中的查询参数（如搜索关键词）干扰 uid 的提取
+        mid = self.find_str(r"/([0-9]+)", urlparse(self.url).path)
 
         return mid
 
@@ -25,9 +28,12 @@ class SpaceParser(ParserBase):
         self.pn = pn
 
         self.mid = self.get_mid()
+        self.keyword = self.get_url_keyword()
 
         self.get_search_arc_info()
         self.get_uname()
+
+        self.set_search_keyword(self.keyword)
 
         if get_info_data:
             return self.info_data
@@ -44,7 +50,7 @@ class SpaceParser(ParserBase):
             "order": "pubdate",
             "mid": self.mid,
             "index": 0,
-            "keyword": "",
+            "keyword": self.keyword,
             "order_avoided": "true",
             "platform": "web",
             "web_location": "333.1387",
@@ -64,8 +70,12 @@ class SpaceParser(ParserBase):
         self.info_data = response
 
     def get_uname(self):
+        # 命中缓存后必须直接返回。此前缺少 return，缓存形同虚设：
+        # 个人空间每翻一页都会重复请求一次用户名接口
         if self.mid in Data.uname_map:
             self.update_space_owner_info()
+
+            return
 
         url = f"https://api.bilibili.com/x/web-interface/card?mid={self.mid}"
 
@@ -96,6 +106,8 @@ class SpaceParser(ParserBase):
                 "total_pages": math.ceil(count / self.ps),
                 "total_items": count,
                 "current_page": self.pn
-            }
+            },
+            "server_search": True,
+            "keyword": self.keyword
         }
     
