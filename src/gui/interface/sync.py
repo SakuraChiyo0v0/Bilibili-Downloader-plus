@@ -9,7 +9,7 @@ from qfluentwidgets import BodyLabel, FluentIcon, LineEdit, ListWidget, PrimaryP
 from gui.component.dialog import DialogBase
 from gui.component.widget import ToolButton
 
-from util.common.enum import ToastNotificationCategory
+from util.common.enum import ToastNotificationCategory, ConventionType
 from util.common.icon import ExtendedFluentIcon
 from util.common.signal_bus import signal_bus
 from util.sync.info import SyncSourceInfo
@@ -21,7 +21,7 @@ from util.thread.worker_base import WorkerBase
 
 
 class ManualSyncAddWorker(WorkerBase):
-    success = Signal(object, int)
+    success = Signal(object)
     error = Signal(str)
 
     def __init__(self, url: str, options: dict, parent = None):
@@ -34,16 +34,7 @@ class ManualSyncAddWorker(WorkerBase):
     def run(self):
         try:
             parsed = SyncSourceParser().parse(self.url)
-            episodes = parsed.get("episodes", [])
-            source = sync_manager.add_or_update_source(
-                title = parsed.get("title", ""),
-                url = self.url,
-                source_type = parsed.get("source_type", ""),
-                episodes = episodes,
-                options = self.options
-            )
-
-            self.success.emit(source, len(episodes))
+            self.success.emit(parsed)
 
         except Exception as e:
             self.error.emit(str(e))
@@ -90,7 +81,11 @@ class AddSyncSourceDialog(DialogBase):
         from gui.dialog.download_options.dialog import DownloadOptionsDialog
 
         with scoped_download_options(self.options):
-            dialog = DownloadOptionsDialog(self.parent())
+            dialog = DownloadOptionsDialog(
+                self.parent(),
+                type_ids = {ConventionType.FAVORITE, ConventionType.COLLECTION, ConventionType.BANGUMI},
+                sync_mode = True
+            )
             dialog.setWindowTitle(self.tr("Sync Download Options"))
 
             if not dialog.exec():
@@ -178,7 +173,12 @@ class SyncSourceItem(QWidget):
         new_options = None
 
         with scoped_download_options(self.source.options):
-            dialog = DownloadOptionsDialog(main_window)
+            type_ids = {
+                "favlist": {ConventionType.FAVORITE},
+                "collection": {ConventionType.COLLECTION},
+                "bangumi": {ConventionType.BANGUMI},
+            }.get(self.source.source_type, set())
+            dialog = DownloadOptionsDialog(main_window, type_ids = type_ids, sync_mode = True)
             dialog.setWindowTitle(self.tr("Sync Download Options"))
 
             if not dialog.exec():
@@ -276,18 +276,31 @@ class SyncInterface(QFrame):
 
         self.set_add_btn_loading(True)
 
+        self._pending_source = (url, options)
         worker = ManualSyncAddWorker(url, options)
         worker.success.connect(self.on_add_source_success)
         worker.error.connect(self.on_add_source_error)
         worker.finished.connect(self.on_add_source_finished)
         AsyncTask.run(worker)
 
-    @Slot(object, int)
-    def on_add_source_success(self, _source: SyncSourceInfo, item_count: int):
+    @Slot(object)
+    def on_add_source_success(self, parsed: dict):
+        url, options = self._pending_source
+        episodes = parsed.get("episodes", [])
+        try:
+            sync_manager.add_or_update_source(
+                title = parsed.get("title", ""), url = url,
+                source_type = parsed.get("source_type", ""),
+                episodes = episodes, options = options
+            )
+        except Exception as error:
+            self.on_add_source_error(str(error))
+            return
+
         signal_bus.toast.show.emit(
             ToastNotificationCategory.SUCCESS,
             "",
-            self.tr("Sync source saved: {count} known items").format(count = item_count)
+            self.tr("Sync source saved: {count} known items").format(count = len(episodes))
         )
 
     @Slot(str)

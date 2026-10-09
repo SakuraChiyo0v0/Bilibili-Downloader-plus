@@ -6,6 +6,7 @@ from qfluentwidgets import SubtitleLabel, BodyLabel, TransparentPushButton, Flue
 from gui.component.dialog import DialogBase
 
 from util.common.config import config
+from util.common.version import FORK_REPOSITORY_URL
 
 from datetime import datetime
 import webbrowser
@@ -32,6 +33,7 @@ class AboutDialog(DialogBase):
         self.sponsor_lab.setWordWrap(True)
 
         self.terms_btn = TransparentPushButton(FluentIcon.DOCUMENT, self.tr("Terms of Use"), self)
+        self.privacy_btn = TransparentPushButton(FluentIcon.CERTIFICATE, self.tr("Privacy Policy"), self)
         self.documentation_btn = TransparentPushButton(FluentIcon.HELP, self.tr("Documentation"), self)
         self.github_btn = TransparentPushButton(FluentIcon.GITHUB, self.tr("Github"), self)
         self.sponsor_btn = TransparentPushButton(FluentIcon.HEART, self.tr("Sponsor"), self)
@@ -51,6 +53,7 @@ class AboutDialog(DialogBase):
         button_layout = QHBoxLayout()
         button_layout.addStretch()
         button_layout.addWidget(self.terms_btn)
+        button_layout.addWidget(self.privacy_btn)
         button_layout.addWidget(self.documentation_btn)
         button_layout.addWidget(self.github_btn)
         button_layout.addWidget(self.sponsor_btn)
@@ -70,6 +73,7 @@ class AboutDialog(DialogBase):
 
     def connect_signals(self):
         self.terms_btn.clicked.connect(self.on_terms)
+        self.privacy_btn.clicked.connect(self.on_privacy)
         self.documentation_btn.clicked.connect(self.on_ducumation)
         self.github_btn.clicked.connect(self.on_github)
         self.sponsor_btn.clicked.connect(self.on_sponsor)
@@ -80,11 +84,17 @@ class AboutDialog(DialogBase):
         dialog = TermsOfUseDialog(self)
         dialog.exec()
 
+    def on_privacy(self):
+        from gui.dialog.main_window.privacy import PrivacyPolicyDialog
+
+        dialog = PrivacyPolicyDialog(self)
+        dialog.exec()
+
     def on_ducumation(self):
         webbrowser.open("https://bili23.scott-sloan.cn/doc/introduction.html")
 
     def on_github(self):
-        webbrowser.open("https://github.com/ScottSloan/Bili23-Downloader")
+        webbrowser.open(FORK_REPOSITORY_URL)
 
     def on_sponsor(self):
         webbrowser.open("https://bili23.scott-sloan.cn/doc/about.html")

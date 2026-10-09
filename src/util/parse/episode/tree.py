@@ -1,53 +1,95 @@
 from PySide6.QtCore import Qt
 
+from contextlib import contextmanager
+from threading import RLock
 from enum import IntFlag
-from typing import List
+from typing import ClassVar, List
 import uuid
 
 class EpisodeData:
     # 全局剧集数据表
-    table: dict[str, dict] = {}
+    table: ClassVar[dict[str, dict]] = {}
+
+    # 解析界面与分P对话框可以同时存活，两边的解析各自跑在自己的线程里，都会往 table 写。
+    # 键是 uuid，条目之间不会冲突，真正危险的是 clear_cache()：它会把另一边刚写进去的
+    # 数据一并擦掉，之后创建下载任务时 get_episode_data() 拿到空字典，UP 主、简介等
+    # 附加信息全部丢失。因此用 _active_parsers 记录正在写入的解析数，有并发解析时跳过清理，
+    # 顶多多留一份用不到的数据，等下一次独占解析时再回收。
+    _lock = RLock()
+    _active_parsers = 0
 
     @classmethod
     def add_episode(cls):
         episode_id = str(uuid.uuid4())
 
-        cls.table[episode_id] = {}
+        with cls._lock:
+            cls.table[episode_id] = {}
 
         return episode_id
-    
+
     @classmethod
     def get_episode_data(cls, episode_id: str):
-        return cls.table.get(episode_id, {})
+        with cls._lock:
+            return cls.table.get(episode_id, {})
 
     @classmethod
     def clear_cache(cls):
-        cls.table.clear()
+        with cls._lock:
+            if cls._active_parsers:
+                return
+
+            cls.table.clear()
+
+    @classmethod
+    @contextmanager
+    def parsing(cls, clear_cache: bool = True):
+        """
+        标记一段正在写入剧集数据的解析流程
+
+        clear_cache 为 True 时会在进入前尝试清空旧数据，清空与登记必须在同一把锁内完成，
+        否则清空之后、登记之前挤进来的另一个解析会被误判为可清理
+        """
+        with cls._lock:
+            if clear_cache and not cls._active_parsers:
+                cls.table.clear()
+
+            cls._active_parsers += 1
+
+        try:
+            yield
+
+        finally:
+            with cls._lock:
+                cls._active_parsers = max(0, cls._active_parsers - 1)
 
 class Attribute(IntFlag):
-    VIDEO_BIT                          = 1 << 0                   # 是否为投稿视频
-    BANGUMI_BIT                        = 1 << 1                   # 是否为剧集
-    CHEESE_BIT                         = 1 << 2                   # 是否为课程
-    WEEKLY_BIT                         = 1 << 3                   # 是否为每周必看
-    COLLECTION_LIST_BIT                = 1 << 4                   # 是否为合集列表
-    SPACE_BIT                          = 1 << 5                   # 是否为个人空间
-    FAVLIST_BIT                        = 1 << 6                   # 是否为收藏夹
+    VIDEO_BIT                                 = 1 << 0                   # 是否为投稿视频
+    BANGUMI_BIT                               = 1 << 1                   # 是否为剧集
+    CHEESE_BIT                                = 1 << 2                   # 是否为课程
+    WEEKLY_BIT                                = 1 << 3                   # 是否为每周必看
+    COLLECTION_LIST_BIT                       = 1 << 4                   # 是否为合集列表
+    SPACE_BIT                                 = 1 << 5                   # 是否为个人空间
+    FAVLIST_BIT                               = 1 << 6                   # 是否为收藏夹
 
-    NEED_PARSE_BIT                     = 1 << 7                   # 是否需要二次解析，如个人空间、收藏夹、合集列表中的视频
+    NEED_PARSE_BIT                            = 1 << 7                   # 是否需要二次解析，如个人空间、收藏夹、合集列表中的视频
 
-    NORMAL_BIT                         = 1 << 8                   # 是否为单个视频（item）
-    PART_BIT                           = 1 << 9                   # 是否为分P（item）
-    COLLECTION_BIT                     = 1 << 10                  # 是否为合集（node）
-    INTERACTIVE_BIT                    = 1 << 11                  # 是否为互动视频（item）
+    NORMAL_BIT                                = 1 << 8                   # 是否为单个视频（item）
+    PART_BIT                                  = 1 << 9                   # 是否为分P（item）
+    COLLECTION_BIT                            = 1 << 10                  # 是否为合集（node）
+    INTERACTIVE_BIT                           = 1 << 11                  # 是否为互动视频（item）
 
-    DOWNLOAD_AS_SINGLE_VIDEO_BIT       = 1 << 12                  # 是否下载为单个视频
+    DOWNLOAD_AS_SINGLE_VIDEO_BIT              = 1 << 12                  # 是否下载为单个视频
 
-    WATCH_LATER_BIT                    = 1 << 13                  # 是否为稍后再看
-    HISTORY_BIT                        = 1 << 14                  # 是否为历史记录
+    WATCH_LATER_BIT                           = 1 << 13                  # 是否为稍后再看
+    HISTORY_BIT                               = 1 << 14                  # 是否为历史记录
 
-    TREE_NODE_BIT                      = 1 << 15                  # 是否为树节点
+    TREE_NODE_BIT                             = 1 << 15                  # 是否为树节点
 
-    AUDIO_BIT                          = 1 << 16                  # 是否为音频
+    AUDIO_BIT                                 = 1 << 16                  # 是否为音频
+
+    FAVORITE_WITH_MULTI_PART_VIDEO_BIT        = 1 << 17                  # 收藏夹中是否包含分P视频
+
+    LESSON_BIT                                = 1 << 18                  # 是否为会员购商城课程
 
 class TreeItemBase:
     def __init__(self):
@@ -97,7 +139,7 @@ class TreeItemBase:
 
     def _propagate_up(self):
         states = [child.checked for child in self.children]
-        
+
         if all(s == Qt.CheckState.Checked for s in states):
             new_state = Qt.CheckState.Checked
 
@@ -112,6 +154,43 @@ class TreeItemBase:
 
             if self.parent:
                 self.parent._propagate_up()
+
+    def refresh_check_state(self):
+        """
+        自底向上重算整棵子树的勾选状态，叶子节点的状态视为已确定
+
+        用于批量改动（如 Shift 范围勾选）后一次性同步父节点状态，
+        避免逐项调用 set_checked_state 触发 O(项数 × 深度) 次向上传递
+        """
+        if not self.children:
+            return self.checked
+
+        states = [child.refresh_check_state() for child in self.children]
+
+        if all(s == Qt.CheckState.Checked for s in states):
+            self.checked = Qt.CheckState.Checked
+
+        elif all(s == Qt.CheckState.Unchecked for s in states):
+            self.checked = Qt.CheckState.Unchecked
+
+        else:
+            self.checked = Qt.CheckState.PartiallyChecked
+
+        return self.checked
+
+    def get_all_leaves(self):
+        """
+        递归返回所有叶子节点（无子节点的项）
+        """
+        if not self.children:
+            return [self]
+
+        leaves: List[TreeItem] = []
+
+        for child in self.children:
+            leaves.extend(child.get_all_leaves())
+
+        return leaves
 
     def get_all_checked_children(self, to_dict = False, mark_as_downloaded = False):
         checked_items: List[TreeItem] = []
@@ -181,6 +260,12 @@ class TreeItem(TreeItemBase):
         self.uploader = item_data.get("uploader", "")
         self.uploader_uid = item_data.get("uploader_uid", 0)
 
+        # 会员购商城课程的定位信息，该类课程没有 aid / cid / ep_id
+        self.course_id = item_data.get("course_id", 0)
+        self.lesson_id = item_data.get("lesson_id", 0)
+        self.item_id = item_data.get("item_id", 0)
+        self.section_id = item_data.get("section_id", 0)
+
         self.downloaded = False
 
     def set_attribute(self, flag: int):
@@ -216,6 +301,14 @@ class TreeItem(TreeItemBase):
                 "uploader_uid": self.uploader_uid
             }
 
+        if self.section_id:
+            data.update({
+                "course_id": self.course_id,
+                "lesson_id": self.lesson_id,
+                "item_id": self.item_id,
+                "section_id": self.section_id
+            })
+
         return data
     
     def search_items(self, keyword: str):
@@ -230,18 +323,17 @@ class TreeItem(TreeItemBase):
             matches.extend(child.search_items(keyword))
 
         return matches
-    
+
+    def has_attribute(self, flag: int):
+        return (self.attribute & flag) == flag
+
     @property
     def dyn_time(self):
-        time_map = {
-            Attribute.FAVLIST_BIT: self.favtime,
-            Attribute.WATCH_LATER_BIT: self.favtime,
-            Attribute.HISTORY_BIT: self.viewtime,
-        }
+        if self.attribute & (Attribute.FAVLIST_BIT | Attribute.WATCH_LATER_BIT):
+            return self.favtime
 
-        for attr_bit, time_value in time_map.items():
-            if self.attribute & attr_bit:
-                return time_value
+        if self.attribute & Attribute.HISTORY_BIT:
+            return self.viewtime
 
         return self.pubtime
     

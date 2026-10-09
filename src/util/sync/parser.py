@@ -101,6 +101,10 @@ def calc_episode_key(episode_info: dict):
 
 class SyncSourceParser:
     def parse(self, url: str):
+        with EpisodeData.parsing(clear_cache = False):
+            return self._parse(url)
+
+    def _parse(self, url: str):
         parser_type = get_parser_type(url)
 
         match parser_type:

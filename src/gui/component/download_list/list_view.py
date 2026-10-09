@@ -7,6 +7,8 @@ from .item_delegate import DownloadItemDelegate
 from .model import DownloadListModel
 from .proxy_model import DownloadListProxyModel
 
+from gui.component.widget.smooth_scroll import applySmoothScroll
+
 from util.download.downloader.manager import downloader_manager
 from util.download.task.info import TaskInfo
 
@@ -20,6 +22,8 @@ from typing import List
 class DownloadListView(ListView):
     def __init__(self, parent = None):
         super().__init__(parent)
+
+        applySmoothScroll(self)
 
         self._emptyTextTip = ""
         self._auto_manage_concurrent = False
@@ -81,8 +85,8 @@ class DownloadListView(ListView):
     def setAutoUpdateCountBadge(self, auto_update: bool):
         self._auto_update_count_badge = auto_update
 
-    def enableSorting(self, default_key: str = None):
-        self._model.enableSorting(default_key)
+    def enableSorting(self, default_key: str = None, ascending: bool = True):
+        self._model.enableSorting(default_key, ascending)
 
     def connectUpdateDataSignal(self):
         self._model.connectUpdateDataSignal()
@@ -122,9 +126,9 @@ class DownloadListView(ListView):
     def removeTask(self, task_info: TaskInfo):
         self._model.removeTask(task_info)
 
-        if self._auto_manage_concurrent and not self._in_batch_cancel:
-            downloader_manager.remove(task_info.Basic.task_id)
+        downloader_manager.remove(task_info.Basic.task_id)
 
+        if self._auto_manage_concurrent and not self._in_batch_cancel:
             self._model.manageConcurrentDownloads()
 
         if self._auto_update_count_badge:
@@ -164,7 +168,9 @@ class DownloadListView(ListView):
             self._auto_manage_pending = False
             self._model.manageConcurrentDownloads()
 
-        QTimer.singleShot(0, run_auto_manage)
+        # self 作为 context：闭包没有可识别的接收者，控件先一步销毁时
+        # 不带 context 的回调仍会执行，然后打在已经析构的 model 上
+        QTimer.singleShot(0, self, run_auto_manage)
 
     def onTogglePauseResumeTask(self, index: QModelIndex, task_info: TaskInfo):
         # 与 model 交互以暂停下载任务
@@ -176,9 +182,10 @@ class DownloadListView(ListView):
 
     def onRedownloadTask(self, index: QModelIndex, task_info: TaskInfo):
         # 与 model 交互以重新下载任务
-        if task_info.Download.status in [DownloadStatus.MERGING, DownloadStatus.CONVERTING]:
-            # 合并和转换过程中的任务不允许直接重新下载
-            signal_bus.toast.show.emit(ToastNotificationCategory.WARNING, "", self.tr("Tasks being processed by FFmpeg cannot be redownloaded"))
+        if task_info.Download.status in [DownloadStatus.MERGING, DownloadStatus.CONVERTING, DownloadStatus.UPLOADING]:
+            # 处理中的文件仍被后台线程使用，不允许同时重新下载。
+            message = self.tr("Tasks being uploaded cannot be redownloaded") if task_info.Download.status == DownloadStatus.UPLOADING else self.tr("Tasks being processed by FFmpeg cannot be redownloaded")
+            signal_bus.toast.show.emit(ToastNotificationCategory.WARNING, "", message)
 
             return
         
@@ -201,3 +208,7 @@ class DownloadListView(ListView):
     @property
     def sort_by_key(self):
         return self._model._sort_by_key
+
+    @property
+    def sort_ascending(self):
+        return self._model._ascending

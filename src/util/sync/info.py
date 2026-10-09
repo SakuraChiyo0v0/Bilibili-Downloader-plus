@@ -32,4 +32,3 @@ class SyncSourceInfo:
         for key, value in data.items():
             if key in field_names:
                 setattr(self, key, value)
-

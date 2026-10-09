@@ -1,10 +1,9 @@
 from ...network.request import ResponseType, SyncNetWorkRequest
 from ...download.task.info import TaskInfo
 from ...common.translator import Translator
-from ...common._json import json_dumps
+from ...common._json import dumps
 from ...common.enum import DanmakuType
-from ...common.config import config
-from ...sync.options import get_task_option
+from ...download.task.options import resolve
 
 from .base import AdditionalParserBase
 from .file.danmaku_ass import DanmakuASS
@@ -22,7 +21,9 @@ class DanmakuParser(AdditionalParserBase):
     def parse(self):
         dict_list = self._get_all_protobuf_parts()
 
-        match self._danmaku_type():
+        danmaku_type = resolve(self.task_info, "danmaku_type")
+
+        match danmaku_type:
             case DanmakuType.XML:
                 contents, suffix = self._to_xml(dict_list)
 
@@ -32,7 +33,23 @@ class DanmakuParser(AdditionalParserBase):
             case DanmakuType.JSON:
                 contents, suffix = self._to_json(dict_list)
 
-        self._write(contents, suffix = suffix, name = self.task_info.File.name, qualifier = [Translator.ADDITIONAL_FILES_QUALIFIER("DANMAKU")])
+        file_name = self._write(contents, suffix = suffix, name = self.task_info.File.name, qualifier = [Translator.ADDITIONAL_FILES_QUALIFIER("DANMAKU")])
+
+        self._check_embed_danmaku(danmaku_type, file_name)
+
+    def _check_embed_danmaku(self, danmaku_type: DanmakuType, file_name: str):
+        # 仅 ASS 格式能作为字幕轨嵌入，其余格式即便开着开关也静默跳过
+        if danmaku_type != DanmakuType.ASS:
+            return
+
+        if not resolve(self.task_info, "embed_danmaku") or not self.is_embed_available(self.task_info):
+            return
+
+        self._add_subtitle_track(
+            file_name,
+            title = Translator.ADDITIONAL_FILES_QUALIFIER("DANMAKU"),
+            kind = "danmaku"
+        )
 
     def _to_xml(self, dict_list: List[dict]) -> tuple:
         xml = DanmakuXML(dict_list, self.task_info.Episode.cid).generate()
@@ -40,13 +57,12 @@ class DanmakuParser(AdditionalParserBase):
         return xml, "xml"
 
     def _to_ass(self, dict_list: List[dict]) -> tuple:
-        style = get_task_option(self.task_info, "danmaku_style", config.get(config.danmaku_style))
-        ass = DanmakuASS(dict_list, self.task_info.Basic.show_title, style = style).generate()
+        ass = DanmakuASS(dict_list, self.task_info.Basic.show_title, style = resolve(self.task_info, "danmaku_style")).generate()
 
         return ass, "ass"
 
     def _to_json(self, dict_list: List[dict]) -> tuple:
-        return json_dumps(dict_list, indent = 2), "json"
+        return dumps(dict_list, indent = 2), "json"
 
     def _get_all_protobuf_parts(self):
         if duration := self.task_info.Episode.duration:
@@ -92,11 +108,3 @@ class DanmakuParser(AdditionalParserBase):
             dict_list.extend([entry for entry in temp_entry if entry.get("stime") and entry.get("text")])
 
         return dict_list
-
-    def _danmaku_type(self):
-        value = get_task_option(self.task_info, "danmaku_type", config.get(config.danmaku_type))
-
-        if isinstance(value, DanmakuType):
-            return value
-
-        return DanmakuType(value)

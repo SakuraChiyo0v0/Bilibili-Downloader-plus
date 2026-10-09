@@ -1,106 +1,96 @@
-<p align="center">
-    <a href="https://bili23.scott-sloan.cn" target="_blank">
-        <img src="https://bili23.scott-sloan.cn/logo.png" alt="Bili23 Downloader" style="width: 500px;"/>
-    </a>
-</p>
+# Bilibili Downloader Plus
 
-<h1 align="center">Bili23-Downloader</h1>
+**Continuous sync, audio library features, and WebDAV storage built on Bili23 Downloader.**
 
-<p align="center">
-    <img src="https://img.shields.io/github/v/release/ScottSloan/Bili23-Downloader?style=flat-square" alt="Release"/>
-    <img src="https://img.shields.io/github/license/ScottSloan/Bili23-Downloader?style=flat-square" alt="License"/>
-    <img src="https://img.shields.io/github/downloads/ScottSloan/Bili23-Downloader/total?style=flat-square" alt="Downloads"/>
-    <img src="https://img.shields.io/github/stars/ScottSloan/Bili23-Downloader?style=flat-square" alt="Stars"/>
-    <img src="https://img.shields.io/github/actions/workflow/status/ScottSloan/Bili23-Downloader/publish.yml?style=flat-square" alt="Build"/>
-</p>
+[![Release](https://img.shields.io/github/v/release/SakuraChiyo0v0/Bilibili-Downloader-plus?style=flat-square)](https://github.com/SakuraChiyo0v0/Bilibili-Downloader-plus/releases)
+[![Quality](https://github.com/SakuraChiyo0v0/Bilibili-Downloader-plus/actions/workflows/quality.yml/badge.svg)](https://github.com/SakuraChiyo0v0/Bilibili-Downloader-plus/actions/workflows/quality.yml)
+[![License](https://img.shields.io/github/license/SakuraChiyo0v0/Bilibili-Downloader-plus?style=flat-square)](LICENSE)
 
-<div align="center">
-    <h3>
-        <a href="https://bili23.scott-sloan.cn/">Official Website</a>
-        <span> • </span>
-        <a href="https://bili23.scott-sloan.cn/doc/intro.html">Documentation</a>
-        <span> • </span>
-        <a href="#-download">Download</a>
-        <span> • </span>
-        <a href="README.md">中文</a>
-        <span> • </span>
-        <a href="README_en.md">English</a>
-    </h3>
-</div>
+[简体中文](README.md) · **English** · [Download Plus](https://github.com/SakuraChiyo0v0/Bilibili-Downloader-plus/releases) · [Report an issue](https://github.com/SakuraChiyo0v0/Bilibili-Downloader-plus/issues) · [Changelog](CHANGELOG.md)
 
-<div align="center">
-    <strong>Open Source, Free, Cross-Platform Bilibili Video Downloader</strong><br>
-</div><br>
+## Upstream and project scope
 
-<p align="center"><img src="https://bili23.scott-sloan.cn/main_interface_en.png" alt="Program Screenshot" style="width: 80%;"></p>
+This project is a fork of **[ScottSloan / Bili23-Downloader](https://github.com/ScottSloan/Bili23-Downloader)**. Video parsing, the download engine, the desktop interface, and most core features come from Scott Sloan and the upstream contributors. Thank you for maintaining this open-source tool.
 
-## ⚡ Features
+Plus **extends upstream**. We follow upstream releases and design decisions, prefer upstream implementations when changes overlap, and adapt our additions to the existing download workflow. This README focuses on those additions. For login, quality selection, subtitles, naming rules, and other core features, see the [upstream documentation](https://bili23.scott-sloan.cn/).
 
-| Feature | Detailed Description |
-| :--- | :--- |
-| 🖥️ **Cross-Platform** | Fully compatible with **Windows** (including Win 7), **Linux**, and **macOS** desktop operating systems. |
-| 🎨 **Modern UI** | Based on Fluent Design, supports seamless light/dark theme switching and native High-DPI scaling. | 
-| 🚀 **Multithreading & Acceleration**| Native integration of multi-threaded parallel downloading, breakpoint resuming, and automatic network error retries for extreme download speed. |
-| 🔗 **Multi-Type Parsing** | Fully supports: `Standard Videos`, `Bangumi`, `Movies`, `Courses`, `User Space`, `Favorites`, `Weekly Must-Watch`, `Subscriptions`, `Watch Later`, `History`, etc., with batch mode support. |
-| ⚙️ **Media Customization**| **Video**: 8K, 4K, HDR, Dolby Vision <br>**Audio**: Hi-Res Lossless, Dolby Atmos <br>**Codec**: AVC, HEVC, AV1 |
-| 💬 **Danmaku & Subtitles** | **Danmaku**: `xml`, `ass`, `json` <br>**Subtitles**: `srt`, `lrc`, `txt`, `ass`, `json` |
-| 🖼️ **Cover Extraction & Embedding**| Losslessly save covers (`jpg`, `png`, `avif`, `webp`), natively supports embedding posters directly into output video files. |
-| 🧩 **NFO Metadata** | Automatically scrapes and generates local media metadata formats complying with standards of media centers like **Kodi**, **Jellyfin**, and **Emby**. |
-| 📁 **Classification & Naming** | Built-in powerful rule engine, supporting highly customizable local file naming templates and multi-level directory classification modes. |
-| 📦 **Format Muxing**| Smart audio & video stream mixing/extraction, supports output format to `mp4` or `mkv` to fulfill broad device compatibility requirements. |
-| 🌐 **i18n Support** | Built-in multi-language interface out of the box: Simplified Chinese, Traditional Chinese, and English. |
-| 🔒 **Secure Auth**| Supports quick and secure **QR Code Login** and **SMS Verification Login**. |
-| 📖 **Open Source & Free**| Released under the **GPL-3.0** License, fully open-source, no in-app purchases, no ads, embracing community contribution. |
+The current source is based on upstream **2.20.0**, identified as **`2.20.0+plus.1`**. This document describes the source branch; check each Release for features included in published packages.
 
-## 📥 Download
+## What Plus adds
 
-Two download methods are available. Choose the one that fits your situation best:
+| Feature | What it does |
+| --- | --- |
+| **Continuous sync** | Save a favorites list, collection, or series as a sync source. Check for new entries and create downloads using that source’s saved options. |
+| **Audio covers and tags** | Embed cover art in audio-only files and write the title, uploader, and source video URL for playback and source tracking. |
+| **Audio to MP3** | Extend upstream processing to convert M4A/FLAC audio to MP3 while retaining enabled cover art and tags. |
+| **WebDAV storage** | Download and process files locally, then upload finished media and selected sidecar files. Configure the remote directory, filename conflicts, and optional local cleanup after upload. |
+| **Per-source download options** | Keep quality, audio, sidecar, naming, and local path choices for each sync source. Queued tasks use options captured at creation. |
 
-- [**Go to GitHub Releases**](https://github.com/ScottSloan/Bili23-Downloader/releases/latest) - Recommended if GitHub is easily accessible for you, and you want the latest release.
-- [**Official Website Download (Recommended for users in China)**](https://bili23.scott-sloan.cn/doc/releases.html) - Recommended for users in China, usually faster and more stable to access.
+Core capabilities—including multithreaded downloads, resume, network retries, parsing, chapters, subtitles, and the naming editor—remain upstream implementations. Audio tags, audio covers, and remote storage are opt-in. Storage defaults to local.
 
-## 🪧 Terms of Use
-This project is for personal learning and research purposes only. The downloaded content is **strictly for personal, non-commercial use, and any form of commercial use, public dissemination, or distribution is completely prohibited.**  
-This software operates solely based on the user's legal account access permissions and **will not bypass any paywalls or platform intellectual property protection measures.** Please do not use this software for batch scraping or any action that violates the target platform's terms of service.  
+## Downloads and updates
 
-**Disclaimer**: Users must independently bear all risks associated with using this project (including but not limited to account bans, copyright disputes, etc.). The project developer assumes no responsibility for any direct or indirect legal disputes or damages caused by the use or inability to use this software.  
+**[Download the enhanced edition from this repository’s Releases →](https://github.com/SakuraChiyo0v0/Bilibili-Downloader-plus/releases)**
 
-By continuing to use this software, you indicate your full understanding and agreement to comply with all the above terms.
+- Choose a package for your operating system from the assets provided by that release. Available platforms depend on the release.
+- New enhanced builds use `upstream-version+plus.revision`, such as `2.20.0+plus.1`. Older releases may predate this convention.
+- In-app update checks use this repository’s enhanced releases, including Plus revisions on the same upstream base.
+- Original packages are available from [upstream Releases](https://github.com/ScottSloan/Bili23-Downloader/releases); they do not contain all additions from this fork.
 
-## 🔑 Open Source License
-This project is released under the **GPLv3 License**.
+| Example | Meaning |
+| --- | --- |
+| `2.20.0+plus.1` | First Plus revision based on upstream 2.20.0 |
+| `2.20.0+plus.2` | Further Plus changes on the same upstream base |
+| `2.21.0+plus.1` | Plus numbering restarts after adopting upstream 2.21.0; naming example only |
 
-Wbi signature, specific APIs, and buvid3 generation parameters are inspired by [SocialSisterYi/bilibili-API-collect](https://github.com/SocialSisterYi/bilibili-API-collect).
+We follow upstream configuration migrations. **Upgrading an older installation to 2.20.0 resets naming rules; configure them again after upgrading.** Keep a copy of important settings before upgrading. Resetting naming rules does not remove previously downloaded files.
 
-## 🛠️ Contributors
-New ideas and pull requests are always welcome!
+## Using the additions
 
-<a href="https://github.com/ScottSloan/Bili23-Downloader/graphs/contributors" target="_blank">
-    <img src="https://contrib.rocks/image?repo=ScottSloan/Bili23-Downloader" alt="Contributors" style="width: 300px;"/>
-</a>
+### Continuous sync
 
-Made with [contrib.rocks](https://contrib.rocks).
+The two entry points have different initial behavior:
 
-## 🌟 Community
-Join our community to get the latest updates, Q&A, and technical discussions.
+1. **Download and Sync:** parse a supported source, select entries, and choose this action. Selected entries are queued for download and the source is saved.
+2. **Add a sync source manually:** enter its link on the Sync page and edit its download options. Current entries become the known baseline; **existing content is not downloaded immediately**. Later checks handle new entries.
 
-- [QQ Group](https://qm.qq.com/q/KX3uJIFIYK)
-- [QQ Channel](https://pd.qq.com/s/8941to1p0)
+Enabled sources are checked every **30 minutes while the application is running**. The Sync page also provides immediate checks, enable/disable controls, deletion, and option editing. Sync does not run after the application exits. Entries whose download tasks could not be created remain eligible for retry.
 
-> When asking questions, please provide the **problem description** and **complete logs** so we can assist you better.
+Sync downloads new content. It does not mirror remote deletions to local files.
 
-## 💪 Support the Author
+### Audio library features
 
-This project is independently developed and maintained by [Scott Sloan](https://github.com/ScottSloan) in his spare time. The original intention is to provide everyone with a pure, ad-free, and efficient local Bilibili downloading tool.
+1. Select audio-only downloading and enable audio-to-MP3 conversion if needed.
+2. Enable **Download Cover**, select an embeddable format such as JPG/PNG, then enable **Embed Audio Cover**. Media tags and source URL tags have separate switches under metadata settings.
+3. Choose whether the original cover image should be removed after successful embedding.
 
-> **⭐️ Leave a Star**  
-> If this tool has saved your precious time, please consider giving it a **Star** in the top right corner of the project!  
-> Your support helps more people discover this project and is the greatest motivation for continuous updates.
+Tag storage depends on the output format: **MP4/M4A with embedded cover art stores the source URL in the standard `comment` tag** to preserve the cover. Other supported paths use `video_url`. How covers and tags are displayed depends on your player.
 
-### ☕️ Buy the Author a Coffee
+### WebDAV
 
-Besides routine code maintenance, handling complex cross-platform environments and refactoring releases take a massive amount of time and energy. If the software has indeed helped you, you are welcome to buy the author a coffee via the sponsor QR code below. **This is the most practical recognition of open-source dedication!**
+1. Choose **WebDAV** in the storage section of download settings.
+2. Enter the server URL, credentials, and remote base path, then use **Test Connection**.
+3. Select a local cache folder, filename conflict policy, and whether local files should be cleaned up after upload.
+4. Create downloads normally. Upload progress appears after media processing, and a task completes only after a successful upload.
 
-<p align="center">
-    <img src="https://bili23.scott-sloan.cn/assets/sponsor_weixin.Bqpdl-if.png" alt="Sponsor QR Code" style="width: 300px; margin: 10px 0; border-radius: 8px;" />
-</p>
+Local disk space is still required for downloading and processing. Upload failures retain local outputs; retries upload those outputs directly. If the application exits during an upload, it waits for a manual retry on the next launch.
+
+**Known limitation:** when some files in a task have uploaded successfully and a later file fails, retrying the whole task with automatic renaming may create duplicate remote files. Per-file upload checkpoints are not currently supported.
+
+## Feedback and contributions
+
+Please report Plus issues in [this repository’s Issues](https://github.com/SakuraChiyo0v0/Bilibili-Downloader-plus/issues). For a shared upstream issue, first check whether it reproduces in the corresponding upstream version before submitting a minimal report upstream.
+
+Include the full version, operating system, relevant settings, reproduction steps, expected and actual behavior, and useful log excerpts or screenshots. Source users should include the commit. Remove cookies, tokens, passwords, and private server addresses before posting.
+
+Fixes, tests, and documentation improvements are welcome. Explain how an enhancement relates to upstream behavior and reuse upstream workflows where possible. See [BUILD.md](BUILD.md) for development, testing, and packaging instructions.
+
+## License and attribution
+
+The code is distributed under the [GNU GPL v3](LICENSE). Downloaded content is intended for personal learning, research, and non-commercial use. Respect content permissions and platform rules; the application does not bypass account access restrictions or paywalls. Users are responsible for risks arising from their use.
+
+We retain and acknowledge these project credits:
+
+- **[Bili23-Downloader](https://github.com/ScottSloan/Bili23-Downloader)** — upstream project by Scott Sloan. Consider starring upstream or visiting its [support page](https://bili23.scott-sloan.cn/doc/about.html).
+- **[bilibili-API-collect](https://github.com/SocialSisterYi/bilibili-API-collect)** — API and signing references.
+- **[PyStand](https://github.com/skywind3000/PyStand)** — Windows launcher origin, under its MIT license. See [launcher/README.md](launcher/README.md) for upstream customizations.

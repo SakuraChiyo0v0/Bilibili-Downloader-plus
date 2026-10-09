@@ -1,7 +1,7 @@
 from pathlib import Path
 from typing import List
 
-from ..common._json import json_dumps, json_loads
+from ..common._json import dumps, loads
 from ..common.config import appdata_path
 from ..common.database import Database
 from .info import SyncSourceInfo
@@ -39,7 +39,7 @@ class SyncDatabase(Database):
 
         for entry in result:
             source = SyncSourceInfo()
-            source.from_dict(json_loads(entry[0]))
+            source.from_dict(loads(entry[0]))
             source_list.append(source)
 
         return source_list
@@ -55,7 +55,7 @@ class SyncDatabase(Database):
             source.source_type,
             1 if source.enabled else 0,
             source.updated_time,
-            json_dumps(source.to_dict()),
+            dumps(source.to_dict()),
         ))
 
     def update_source(self, source: SyncSourceInfo):
@@ -69,7 +69,7 @@ class SyncDatabase(Database):
             source.source_type,
             1 if source.enabled else 0,
             source.updated_time,
-            json_dumps(source.to_dict()),
+            dumps(source.to_dict()),
             source.sync_id,
         ))
 
@@ -77,4 +77,3 @@ class SyncDatabase(Database):
         self.execute("""
             DELETE FROM sync_source WHERE sync_id = ?
         """, (sync_id,))
-

@@ -7,53 +7,68 @@ from ...parse.episode.video import VideoEpisodeParser
 from ...parse.parser.base import ParserBase
 
 from ...common.data.bangumi_type import bangumi_type_map
+from ...common.enum import ToastNotificationCategory
 from ...common.signal_bus import signal_bus
+from ...common.translator import Translator
 
 from ...network.request import SyncNetWorkRequest
 
+import logging
+
+logger = logging.getLogger(__name__)
+
+
 class ReparseWorker(QRunnable, ParserBase):
-    def __init__(self, episode_info: dict, options: dict = None):
+    def __init__(self, episode_info: dict, show_toast: bool = False, options: dict = None):
         super().__init__()
 
         self.info_data: dict = None
         self.episode_info: dict = episode_info
         self.original_episode_data: dict = None
+        self.show_toast = show_toast
+        # 发起本次下载时指定的选项，二次解析完成后要原样带回 create()
         self.options = options
 
+    def parse_episodes(self):
+        # 后台同步必须拿到二次解析的实际结果，再等待建任务落盘；界面入口仍发信号。
+        with EpisodeData.parsing(clear_cache = False):
+            self.original_episode_data = EpisodeData.get_episode_data(self.episode_info.get("episode_id"))
+            episode_node = self.parse_episode_node_info()
+            return episode_node.get_all_children(to_dict = True)
+
     def run(self):
-        # 提取收藏夹/个人空间的 episode_data
-        episode_id = self.episode_info.get("episode_id")
-        extra_data = self.episode_info.get("_episode_extra_data")
+        try:
+            signal_bus.download.create_task.emit(self.parse_episodes(), self.show_toast, self.options)
 
-        if episode_id and extra_data:
-            EpisodeData.table[episode_id] = extra_data
+        except Exception as e:
+            logger.exception("解析下载任务失败： %s", self.episode_info.get("title", ""))
 
-        self.original_episode_data = EpisodeData.get_episode_data(episode_id)
-        
-        episode_node = self.parse_episode_node_info()
-
-        episode_list = episode_node.get_all_children(to_dict = True)
-
-        if self.options:
-            signal_bus.download.create_task_with_options.emit(episode_list, self.options)
-        else:
-            signal_bus.download.create_task.emit(episode_list)
+            if self.show_toast:
+                signal_bus.toast.show_long_message.emit(
+                    ToastNotificationCategory.ERROR,
+                    Translator.ERROR_MESSAGES("PARSE_FAILED"),
+                    str(e)
+                )
 
     def parse_episode_node_info(self):
-        # 视频
         if self.episode_info.get("attribute", 0) & Attribute.VIDEO_BIT:
             episode_parser = self.parse_video_info()
 
-        # 剧集
         elif self.episode_info.get("attribute", 0) & Attribute.BANGUMI_BIT:
             episode_parser = self.parse_bangumi_info()
 
-        # 课程
         elif self.episode_info.get("attribute", 0) & Attribute.CHEESE_BIT:
             episode_parser = self.parse_cheese_info()
 
+        else:
+            # 条目标了 NEED_PARSE_BIT 却一个媒体形态位都没有，解析器认不出这是什么。
+            # 这里以前没有分支：episode_parser 未绑定，抛出的 UnboundLocalError
+            # 被 run() 的 except 原样塞进提示框，用户看到的是「局部变量
+            # episode_parser 未绑定」—— 一句对定位毫无帮助的 Python 内部信息
+            raise RuntimeError(Translator.ERROR_MESSAGES("UNSUPPORTED_ENTRY_TYPE"))
+
         return episode_parser.parse(update_episode_list = False)
-    
+
     def parse_video_info(self):
         bvid = self.episode_info.get("bvid")
 
@@ -65,7 +80,7 @@ class ReparseWorker(QRunnable, ParserBase):
         ep_id = self.episode_info.get("ep_id")
 
         self.get_bangumi_info(ep_id)
-            
+
         category_name = bangumi_type_map.get(self.info_data["result"]["type"])
 
         return BangumiEpisodeParser(self.info_data, category_name, kwargs = self.get_kwargs(ep_id))
@@ -76,14 +91,15 @@ class ReparseWorker(QRunnable, ParserBase):
         self.get_cheese_info(season_id)
 
         return CheeseEpisodeParser(self.info_data, "COURSE", kwargs = self.get_kwargs(season_id))
-    
+
     def get_kwargs(self, target_episode_info: str | int):
         return {
             "target_episode_info": target_episode_info,
             "target_episode_data_id": self.episode_info.get("episode_id"),
-            "target_attribute": self.episode_info.get("attribute") & ~Attribute.NEED_PARSE_BIT
+            "target_attribute": self.episode_info.get("attribute") & ~Attribute.NEED_PARSE_BIT,
+            "target_number": self.episode_info.get("number")
         }
-    
+
     def get_video_info(self, bvid: str):
         params = {
             "bvid": bvid

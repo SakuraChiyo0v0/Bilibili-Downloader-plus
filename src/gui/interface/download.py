@@ -3,13 +3,14 @@ from PySide6.QtWidgets import QFrame, QHBoxLayout, QVBoxLayout
 from qfluentwidgets import SubtitleLabel, Pivot, PopUpAniStackedWidget
 
 from gui.component.download_list import TopStackedWidget, DownloadListView
-from gui.component.widget import PivotItem
+from gui.component.widget.pivot import PivotItem
 
 from util.download.task.query_worker import QueryWorker
 from util.download.task.info import TaskInfo
 
 from util.common.enum import ToastNotificationCategory
 from util.common.signal_bus import signal_bus
+from util.common.config import config
 from util.thread.async_ import AsyncTask
 
 class DownloadInterface(QFrame):
@@ -34,11 +35,17 @@ class DownloadInterface(QFrame):
         self.downloading_list_view.setAutoManageConcurrentTasks(True)
         self.downloading_list_view.setAutoUpdateCountBadge(True)
         self.downloading_list_view.connectUpdateDataSignal()
-        self.downloading_list_view.enableSorting("created_time")
+        self.downloading_list_view.enableSorting(
+            config.get(config.downloading_list_sort_by),
+            config.get(config.downloading_list_sort_ascending)
+        )
 
         self.completed_list_view = DownloadListView(self)
         self.completed_list_view.setEmptyTextTip(self.tr("No completed downloads"))
-        self.completed_list_view.enableSorting("completed_time")
+        self.completed_list_view.enableSorting(
+            config.get(config.completed_list_sort_by),
+            config.get(config.completed_list_sort_ascending)
+        )
 
         top_layout = QHBoxLayout()
         top_layout.addWidget(self.pivot)
@@ -65,14 +72,37 @@ class DownloadInterface(QFrame):
         signal_bus.download.remove_from_downloading_list.connect(self.downloading_list_view.removeTask)
         signal_bus.download.remove_from_completed_list.connect(self.completed_list_view.removeTask)
 
-        signal_bus.download.sort_downloading_list.connect(self.downloading_list_view._model.sortBy)
-        signal_bus.download.sort_completed_list.connect(self.completed_list_view._model.sortBy)
+        signal_bus.download.sort_downloading_list.connect(self.on_sort_downloading_list)
+        signal_bus.download.sort_completed_list.connect(self.on_sort_completed_list)
 
         self.top_stacked_widget.start_all_btn.clicked.connect(self.downloading_list_view._model.batchStart)
         self.top_stacked_widget.pause_all_btn.clicked.connect(self.downloading_list_view._model.batchPause)
         self.top_stacked_widget.delete_all_btn.clicked.connect(self.downloading_list_view.batch_cancel)
         
         self.top_stacked_widget.clear_all_btn.clicked.connect(self.completed_list_view._model.batch_cancel)
+
+    def on_sort_downloading_list(self, key: str, ascending: bool):
+        self._save_sort_preference(
+            config.downloading_list_sort_by,
+            config.downloading_list_sort_ascending,
+            key,
+            ascending
+        )
+        self.downloading_list_view._model.sortBy(key, ascending)
+
+    def on_sort_completed_list(self, key: str, ascending: bool):
+        self._save_sort_preference(
+            config.completed_list_sort_by,
+            config.completed_list_sort_ascending,
+            key,
+            ascending
+        )
+        self.completed_list_view._model.sortBy(key, ascending)
+
+    def _save_sort_preference(self, key_item, ascending_item, key: str, ascending: bool):
+        config.set(key_item, key, save = False)
+        config.set(ascending_item, ascending, save = False)
+        config.save()
 
     def addSubInterface(self, widget: SubtitleLabel, objectName: str, text: str, index):
         def onClick():

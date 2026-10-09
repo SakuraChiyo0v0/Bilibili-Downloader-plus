@@ -1,18 +1,23 @@
 from PySide6.QtWidgets import QVBoxLayout
-from PySide6.QtCore import QTimer
+from PySide6.QtCore import QTimer, Signal
 
 from qfluentwidgets import MessageBox
 
-from gui.dialog.download_options.card import MediaInfoCard, MediaOptionsCard
-from gui.component.widget import ScrollArea
+from gui.dialog.download_options.card import MediaInfoCard
+from gui.component.setting import MediaOptionsCard
+from gui.component.widget.scroll import ScrollArea
 
 from util.parse.preview.info import PreviewerInfo
 from util.common.data import video_quality_map, audio_quality_map, video_codec_map
 from util.common.translator import Translator
 from util.common.signal_bus import signal_bus
 from util.common.config import config
+from util.common.runtime import runtime
 
 class MediaSettingsPage(ScrollArea):
+    # 下载内容发生变化时发出，用于刷新下载内容预览
+    preview_changed = Signal()
+
     def __init__(self, parent = None):
         super().__init__(parent = parent)
 
@@ -44,7 +49,22 @@ class MediaSettingsPage(ScrollArea):
         self.media_info_card.audio_quality_widget.custom_btn.clicked.connect(self.on_adjust_audio_quality_priority)
         self.media_info_card.video_codec_widget.custom_btn.clicked.connect(self.on_adjust_video_codec_priority)
 
+        self.media_options_card.download_video_stream_switch.checkedChanged.connect(self.preview_changed)
+        self.media_options_card.download_audio_stream_switch.checkedChanged.connect(self.preview_changed)
+
     def init_media_info(self):
+        if getattr(self.options_dialog, "sync_mode", False):
+            # 同步源选项适用于整批内容，不使用当前解析页中其他视频的媒体信息。
+            self.media_info_card.source_group.hide()
+            # 优先级是全局偏好，源快照只保存具体画质/编码或“自动选择”。
+            for widget in (self.media_info_card.video_quality_widget, self.media_info_card.audio_quality_widget, self.media_info_card.video_codec_widget):
+                widget.custom_btn.hide()
+            self.media_info_card.update_choice_data(video_quality_map, audio_quality_map, video_codec_map)
+            self.connect_signals()
+            return
+
+        self.media_info_card.update_source_description()
+
         self.media_info_card.update_choice_data(PreviewerInfo.video_quality_choice_data, PreviewerInfo.audio_quality_choice_data, PreviewerInfo.video_codec_choice_data)
 
         self.on_change_video_info_choice()
@@ -53,6 +73,9 @@ class MediaSettingsPage(ScrollArea):
         self.connect_signals()
 
     def on_change_video_info_choice(self):
+        if getattr(self.options_dialog, "sync_mode", False):
+            return
+
         self.media_info_card.pre_query_video_info()
 
         signal_bus.parse.query_video_info.emit(
@@ -62,6 +85,9 @@ class MediaSettingsPage(ScrollArea):
         )
 
     def on_change_audio_info_choice(self):
+        if getattr(self.options_dialog, "sync_mode", False):
+            return
+
         self.media_info_card.pre_query_audio_info()
 
         signal_bus.parse.query_audio_info.emit(
@@ -70,25 +96,13 @@ class MediaSettingsPage(ScrollArea):
         )
 
     def on_save(self):
-        config.video_quality_id = self.media_info_card.video_quality_id
-        config.audio_quality_id = self.media_info_card.audio_quality_id
-        config.video_codec_id = self.media_info_card.video_codec_id
+        runtime.download.video_quality_id = self.media_info_card.video_quality_id
+        runtime.download.audio_quality_id = self.media_info_card.audio_quality_id
+        runtime.download.video_codec_id = self.media_info_card.video_codec_id
 
-        config.download_video_stream = self.media_options_card.download_video_stream
-        config.download_audio_stream = self.media_options_card.download_audio_stream
-        config.merge_video_audio = self.media_options_card.merge_video_audio
-        config.keep_original_files = self.media_options_card.keep_original_files
-
-        config.keep_original_files_type = self.media_options_card.original_files_type_choice.currentIndex()
-
-        config.set(config.download_option_video_quality_id, config.video_quality_id)
-        config.set(config.download_option_audio_quality_id, config.audio_quality_id)
-        config.set(config.download_option_video_codec_id, config.video_codec_id)
-        config.set(config.download_option_video_stream, config.download_video_stream)
-        config.set(config.download_option_audio_stream, config.download_audio_stream)
-        config.set(config.download_option_merge_video_audio, config.merge_video_audio)
-        config.set(config.download_option_keep_original_files, config.keep_original_files)
-        config.set(config.download_option_keep_original_files_type, config.keep_original_files_type)
+        # 媒体选项存的是 config，不是 runtime —— 对话框只是它的两个入口之一，
+        # 因此同样在这里统一落盘；关掉对话框等于取消，那时不会走到这里
+        self.media_options_card.save()
 
     def on_check(self):
         # 只下载独立视频流会导致没有声音，提示用户确认
@@ -123,7 +137,13 @@ class MediaSettingsPage(ScrollArea):
             self.media_options_card.download_video_stream or
             self.media_options_card.download_audio_stream
         )
-    
+
+    def get_download_preview(self):
+        return {
+            "video": self.media_options_card.download_video_stream,
+            "audio": self.media_options_card.download_audio_stream
+        }
+
     def on_adjust_video_quality_priority(self):
         from ..setting.priority import PriorityDialog
 

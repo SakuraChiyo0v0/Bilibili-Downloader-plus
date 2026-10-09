@@ -13,7 +13,7 @@ from .provider import StorageProvider
 class WebDAVStorageProvider(StorageProvider):
     def __init__(self, url: str, username: str = "", password: str = "",
                  base_path: str = "/", verify_ssl: bool = True,
-                 proxies: dict | None = None):
+                 proxies: dict | None = None, trust_env: bool = False):
         self.url = url.rstrip("/")
         self.base_path = self._normalize_path(base_path)
 
@@ -26,14 +26,15 @@ class WebDAVStorageProvider(StorageProvider):
             proxy_url = proxies.get("http") or proxies.get("https")
             if proxy_url:
                 mounts = {
-                    "http://": httpx.HTTPTransport(proxy=proxy_url),
-                    "https://": httpx.HTTPTransport(proxy=proxy_url),
+                    "http://": httpx.HTTPTransport(proxy=proxy_url, verify=verify_ssl),
+                    "https://": httpx.HTTPTransport(proxy=proxy_url, verify=verify_ssl),
                 }
 
         self._client = httpx.Client(
             auth=auth,
             verify=verify_ssl,
             mounts=mounts,
+            trust_env=trust_env,
             follow_redirects=True,
             timeout=30,
         )

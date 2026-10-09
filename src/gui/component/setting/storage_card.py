@@ -19,8 +19,8 @@ class StorageSettingCard(ExpandGroupSettingCard):
     def __init__(self, parent_window, parent=None):
         super().__init__(
             ExtendedFluentIcon.SERVER,
-            self.tr("保存位置"),
-            self.tr("文件下载后的最终保存位置"),
+            self.tr("Storage"),
+            self.tr("Choose where downloaded files are stored"),
             parent
         )
 
@@ -29,15 +29,15 @@ class StorageSettingCard(ExpandGroupSettingCard):
         # 存储方式
         self.storage_type_choice = SettingComboBox(
             config.storage_type,
-            [self.tr("本地"), self.tr("WebDAV")],
+            [self.tr("Local"), self.tr("WebDAV")],
             parent=self
         )
 
         # 路径选择（本地 = 保存路径，WebDAV = 缓存目录）
         self.download_path_card = PushSettingCard(
-            self.tr("更改"),
+            self.tr("Choose folder"),
             FluentIcon.FOLDER,
-            self.tr("保存路径"),
+            self.tr("Local Cache"),
             "",
             self
         )
@@ -46,19 +46,19 @@ class StorageSettingCard(ExpandGroupSettingCard):
         # WebDAV 专属选项
         self.conflict_choice = SettingComboBox(
             config.webdav_conflict_resolution,
-            [self.tr("自动重命名"), self.tr("覆盖")],
+            [self.tr("Auto rename"), self.tr("Overwrite")],
             parent=self
         )
         self.cleanup_switch = SettingSwitchButton(config.cleanup_after_upload, parent=self)
-        self.webdav_config_btn = PushButton(self.tr("配置…"), self)
+        self.webdav_config_btn = PushButton(self.tr("Configure…"), self)
         self.webdav_config_btn.clicked.connect(self._on_configure_webdav)
 
         # 分组
-        self.type_group = self.addGroup("", self.tr("存储方式"), "", self.storage_type_choice)
-        self.path_group = self.addGroup(FluentIcon.FOLDER, self.tr("保存路径"), "", self.download_path_card)
-        self.conflict_group = self.addGroup("", self.tr("同名文件处理"), "", self.conflict_choice)
-        self.cleanup_group = self.addGroup("", self.tr("上传后清理缓存"), "", self.cleanup_switch)
-        self.webdav_group = self.addGroup(ExtendedFluentIcon.SERVER, self.tr("服务器"), "", self.webdav_config_btn)
+        self.type_group = self.addGroup("", self.tr("Storage Type"), "", self.storage_type_choice)
+        self.path_group = self.addGroup(FluentIcon.FOLDER, self.tr("Local Cache"), "", self.download_path_card)
+        self.conflict_group = self.addGroup("", self.tr("File Conflict Resolution"), "", self.conflict_choice)
+        self.cleanup_group = self.addGroup("", self.tr("Clean Up After Upload"), "", self.cleanup_switch)
+        self.webdav_group = self.addGroup(ExtendedFluentIcon.SERVER, self.tr("WebDAV Server"), "", self.webdav_config_btn)
 
         # 信号
         self.diskSpaceReady.connect(self.on_disk_space_ready)
@@ -72,63 +72,42 @@ class StorageSettingCard(ExpandGroupSettingCard):
 
         QTimer.singleShot(0, self._refresh_disk_space)
 
+    def _cache_path(self):
+        return config.get(config.local_temp_path) or config.get(config.download_path)
+
     def _on_storage_type_changed(self, storage_type: StorageType):
         is_webdav = storage_type == StorageType.WEBDAV
-
-        if is_webdav:
-            self.download_path_card.setTitle(self.tr("本地缓存"))
-            self.path_group.setContent(self.tr("视频先下载到此目录，合并后再上传到 WebDAV"))
-            path = config.get(config.local_temp_path) or config.get(config.download_path)
-        else:
-            self.download_path_card.setTitle(self.tr("保存路径"))
-            self.path_group.setContent("")
-            path = config.get(config.download_path)
-
-        self.download_path_card.setContent(path)
-        self._refresh_disk_space()
-
+        self.path_group.setContent(self.tr("Files are processed locally before being uploaded to WebDAV"))
+        self.download_path_card.setContent(self._cache_path())
+        self.path_group.setEnabled(is_webdav)
         self.conflict_group.setEnabled(is_webdav)
         self.cleanup_group.setEnabled(is_webdav)
         self.webdav_group.setEnabled(is_webdav)
+        self._refresh_disk_space()
 
     def _on_change_path(self):
-        storage_type = config.get(config.storage_type)
-
-        if storage_type == StorageType.WEBDAV:
-            config_key = config.local_temp_path
-            title = self.tr("选择本地缓存目录")
-            default = config.get(config.local_temp_path) or config.get(config.download_path)
-        else:
-            config_key = config.download_path
-            title = self.tr("选择保存位置")
-            default = config.get(config.download_path)
-
-        path = Directory.browse_directory(self.parent_window, title, default)
-
+        path = Directory.browse_directory(self.parent_window, self.tr("Choose cache folder"), self._cache_path())
         if path:
-            config.set(config_key, path)
-            self.download_path_card.setContent(path)
-            self._refresh_disk_space()
+            config.set(config.local_temp_path, path)
+            self._refresh_disk_space(check_filesystem = True)
 
-    def _refresh_disk_space(self):
-        storage_type = config.get(config.storage_type)
-        path = (
-            config.get(config.local_temp_path) or config.get(config.download_path)
-            if storage_type == StorageType.WEBDAV
-            else config.get(config.download_path)
-        )
+    def _refresh_disk_space(self, check_filesystem: bool = False):
+        path = self._cache_path()
 
         def worker():
             self.diskSpaceReady.emit(path, Directory.calc_disk_space(path))
-            filesystem_type = Directory.get_filesystem_type(path)
-            self.filesystemTypeReady.emit(path, filesystem_type)
+            if check_filesystem:
+                self.filesystemTypeReady.emit(path, Directory.get_filesystem_type(path))
 
         GlobalThreadPoolTask.run_func(worker)
 
     def on_disk_space_ready(self, path: str, disk_space_info: dict = None):
+        if path != self._cache_path():
+            return
+
         if disk_space_info:
             self.download_path_card.setContent(
-                self.tr("{path}  ({free} 可用)").format(
+                self.tr("{path} ({free} available)").format(
                     path=path, free=disk_space_info.get("free")
                 )
             )
@@ -136,17 +115,14 @@ class StorageSettingCard(ExpandGroupSettingCard):
             self.download_path_card.setContent(path)
 
     def on_filesystem_type_ready(self, path: str, filesystem_type: str):
-        if filesystem_type is None:
+        if path != self._cache_path() or filesystem_type is None:
             return
 
         if filesystem_type.upper() in ("FAT32", "EXFAT", "VFAT", "MSDOS", "FAT", "FAT16", "FAT12", "MS-DOS"):
             from ..dialog import MessageBox
             dialog = MessageBox(
-                self.tr("不支持的文件系统"),
-                self.tr(
-                    "当前分区文件系统为 {type}，不支持大于 4 GB 的文件。"
-                    "请将保存位置更换为 NTFS 分区。"
-                ).format(type=filesystem_type),
+                self.tr("The file system of the selected path does not support sparse files"),
+                self.tr('The file system type of the currently selected cache path is {fs}, which does not support sparse files.\n\nIf you continue, please disable the "Preallocate file space" option. (Settings → Behavior → Download Handling)').format(fs=filesystem_type),
                 self.parent_window
             )
             dialog.hideCancelButton()

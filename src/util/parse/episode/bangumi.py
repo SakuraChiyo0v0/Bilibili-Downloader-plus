@@ -64,7 +64,7 @@ class BangumiEpisodeParser(EpisodeParserBase):
                     "cover": episode["cover"],
                     "duration": int(self.get_episode_duration(episode) / 1000),
                     "ep_id": episode["ep_id"],
-                    "number": self.episode_count,
+                    "number": self.get_display_number(self.episode_count),
                     "pubtime": episode["pub_time"],
                     "title": self.get_bangumi_title(episode),
                     "related_titles": {
@@ -135,7 +135,7 @@ class BangumiEpisodeParser(EpisodeParserBase):
         # 地区
         episode_data["areas"] = [entry["name"] for entry in self.info_data.get("areas", "")]
         # 发行日期
-        episode_data["premiered"] = int(Time.from_string(self.info_data["publish"]["pub_time"]).timestamp())
+        episode_data["premiered"] = int(Time.timestamp_from_string(self.info_data["publish"]["pub_time"]))
         # 简介
         episode_data["description"] = self.info_data.get("evaluate", "")
         # 风格

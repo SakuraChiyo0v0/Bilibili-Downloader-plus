@@ -9,9 +9,21 @@ on:
   workflow_dispatch:
     inputs:
       release_tag:
-        description: "Release tag or version name, for example v2.00.3 or v2.00.3-rc1"
+        description: "Plus release tag matching the source version, for example v2.20.0+plus.1"
         required: true
         type: string
+      build_windows:
+        description: "Build Windows packages"
+        type: boolean
+        default: true
+      build_linux:
+        description: "Build Linux packages"
+        type: boolean
+        default: true
+      build_macos:
+        description: "Build macOS packages"
+        type: boolean
+        default: true
 
 jobs:
   get-version:
@@ -20,32 +32,46 @@ jobs:
       VERSION: ${{ steps.set-version.outputs.VERSION }}
       VERSION_NAME: ${{ steps.set-version.outputs.VERSION_NAME }}
       IS_PRERELEASE: ${{ steps.set-version.outputs.IS_PRERELEASE }}
+      RPM_RELEASE: ${{ steps.set-version.outputs.RPM_RELEASE }}
+      DEB_VERSION: ${{ steps.set-version.outputs.DEB_VERSION }}
+      BUILD_WINDOWS: ${{ steps.set-targets.outputs.BUILD_WINDOWS }}
+      BUILD_LINUX: ${{ steps.set-targets.outputs.BUILD_LINUX }}
+      BUILD_MACOS: ${{ steps.set-targets.outputs.BUILD_MACOS }}
     steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+
       - name: Set version
         id: set-version
+        env:
+          RELEASE_TAG: ${{ inputs.release_tag || github.ref_name }}
+        run: |
+          python scripts/release_version.py "$RELEASE_TAG" --github-output "$GITHUB_OUTPUT"
+
+      - name: Set build targets
+        id: set-targets
+        env:
+          DEFAULT_BUILD_WINDOWS: "true"
+          DEFAULT_BUILD_LINUX: "true"
+          DEFAULT_BUILD_MACOS: "true"
         run: |
           if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
-            TAG_NAME="${{ inputs.release_tag }}"
+            echo "BUILD_WINDOWS=${{ inputs.build_windows }}" >> $GITHUB_OUTPUT
+            echo "BUILD_LINUX=${{ inputs.build_linux }}" >> $GITHUB_OUTPUT
+            echo "BUILD_MACOS=${{ inputs.build_macos }}" >> $GITHUB_OUTPUT
           else
-            TAG_NAME="${GITHUB_REF#refs/tags/}"
+            echo "BUILD_WINDOWS=$DEFAULT_BUILD_WINDOWS" >> $GITHUB_OUTPUT
+            echo "BUILD_LINUX=$DEFAULT_BUILD_LINUX" >> $GITHUB_OUTPUT
+            echo "BUILD_MACOS=$DEFAULT_BUILD_MACOS" >> $GITHUB_OUTPUT
           fi
-
-          TAG_NAME="${TAG_NAME#v}"
-
-          echo "VERSION=$(echo "$TAG_NAME" | sed 's/-rc.*//')" >> $GITHUB_OUTPUT
-          echo "VERSION_NAME=$TAG_NAME" >> $GITHUB_OUTPUT
-
-          if echo "$TAG_NAME" | grep -q -- '-rc'; then
-            echo "IS_PRERELEASE=true" >> $GITHUB_OUTPUT
-          else
-            echo "IS_PRERELEASE=false" >> $GITHUB_OUTPUT
-          fi
-
-          # echo "VERSION=2.00.5" >> $GITHUB_OUTPUT
-          # echo "VERSION_NAME=2.00.5" >> $GITHUB_OUTPUT
 
   windows-build:
+    if: needs.get-version.outputs.BUILD_WINDOWS == 'true'
     needs: get-version
+    environment: signing
     env:
       VERSION: ${{ needs.get-version.outputs.VERSION }}
       VERSION_NAME: ${{ needs.get-version.outputs.VERSION_NAME }}
@@ -56,78 +82,136 @@ jobs:
       IS_PRERELEASE: ${{ env.IS_PRERELEASE }}
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v6
-
-      - name: Clean up files
-        run: |
-          # 清理不需要的资源文件以减小安装包体积
-          Remove-Item -Path src\res\icon -Recurse -Force
-          Remove-Item -Path src\res\image -Recurse -Force
-          Remove-Item -Path src\res\i18n\bili23.zh_CN.ts -Force
-          Remove-Item -Path src\res\i18n\bili23.zh_TW.ts -Force
+      - uses: actions/checkout@v7
 
       - name: Setup Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: 3.13
           architecture: x64
 
-      - name: Install dependencies
-        run: |
-          pip install -r requirements.txt
-
       - name: Update Inno Setup script with version
         run: |
           $setupPath = "assets\setup.iss"
-          $content = Get-Content $setupPath -Raw -Encoding UTF8
+          $content = Get-Content $setupPath -Raw
           $content = $content -replace '(?m)^#define\s+MyAppVersion\s+".*?"', "#define MyAppVersion `"$env:VERSION`""
           $content = $content -replace '(?m)^#define\s+MyAppVersionName\s+".*?"', "#define MyAppVersionName `"$env:VERSION_NAME`""
-          [System.IO.File]::WriteAllText((Resolve-Path $setupPath), $content, (New-Object System.Text.UTF8Encoding($true)))
+          [System.IO.File]::WriteAllText((Resolve-Path $setupPath), $content, (New-Object System.Text.UTF8Encoding($false)))
 
       - name: Install Inno Setup and Chinese language pack
         run: |
           # 安装 Inno Setup
-          Invoke-WebRequest -Uri "https://jrsoftware.org/download.php/is.exe" -OutFile "is.exe"
-          Start-Process "is.exe" -Wait -ArgumentList "/VERYSILENT"
+          choco install innosetup --yes --no-progress
+          if ($LASTEXITCODE -ne 0) {
+            throw "Failed to install Inno Setup (exit code: $LASTEXITCODE)"
+          }
+
+          $inno = @(
+            "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+            "$env:ProgramFiles\Inno Setup 6\ISCC.exe"
+          ) | Where-Object { Test-Path $_ } | Select-Object -First 1
+
+          if (-not $inno) {
+            throw "ISCC.exe was not found after installing Inno Setup"
+          }
+
+          $languageDir = Join-Path (Split-Path $inno) "Languages"
+          New-Item -ItemType Directory -Path $languageDir -Force | Out-Null
 
           # 简中语言包
-          $lang_zh_cn_url = "https://raw.githubusercontent.com/jrsoftware/issrc/refs/heads/main/Files/Languages/ChineseSimplified.isl"
-          Invoke-WebRequest -Uri $lang_zh_cn_url -OutFile "ChineseSimplified.isl"
-          Move-Item -Path "ChineseSimplified.isl" -Destination "C:\Program Files (x86)\Inno Setup 6\Languages\ChineseSimplified.isl"
+          $lang_zh_cn_url = "https://raw.githubusercontent.com/jrsoftware/issrc/main/Files/Languages/ChineseSimplified.isl"
+          $lang_zh_cn_path = Join-Path $languageDir "ChineseSimplified.isl"
+          curl.exe --fail --location --retry 3 --retry-all-errors --output $lang_zh_cn_path $lang_zh_cn_url
+          if ($LASTEXITCODE -ne 0 -or -not (Test-Path $lang_zh_cn_path)) {
+            throw "Failed to download ChineseSimplified.isl"
+          }
 
           # 繁中语言包
-          $lang_zh_tw_url = "https://raw.githubusercontent.com/jrsoftware/issrc/refs/heads/main/Files/Languages/ChineseTraditional.isl"
-          Invoke-WebRequest -Uri $lang_zh_tw_url -OutFile "ChineseTraditional.isl"
-          Move-Item -Path "ChineseTraditional.isl" -Destination "C:\Program Files (x86)\Inno Setup 6\Languages\ChineseTraditional.isl"
+          $lang_zh_tw_url = "https://raw.githubusercontent.com/jrsoftware/issrc/main/Files/Languages/ChineseTraditional.isl"
+          $lang_zh_tw_path = Join-Path $languageDir "ChineseTraditional.isl"
+          curl.exe --fail --location --retry 3 --retry-all-errors --output $lang_zh_tw_path $lang_zh_tw_url
+          if ($LASTEXITCODE -ne 0 -or -not (Test-Path $lang_zh_tw_path)) {
+            throw "Failed to download ChineseTraditional.isl"
+          }
+
+          "INNO_COMPILER=$inno" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
 
       - name: Prepare Windows 10/11 runtime
         run: |
-          # 下载 Python 静态运行时环境
-          Invoke-WebRequest -Uri "https://github.com/ScottSloan/Python-Static/releases/download/v0.1.0/windows_x64_runtime.zip" -OutFile windows_x64_runtime.zip
-          
-          Expand-Archive windows_x64_runtime.zip -DestinationPath Bili23-Downloader
+          # 模板只提供 runtime、site-packages、bundle 与随包的 LICENSE，
+          # 启动器由下一步现场编译后放入
+          Invoke-WebRequest -Uri "https://github.com/ScottSloan/Python-Static/releases/download/v0.1.9/windows_x64_runtime.zip" -OutFile windows_x64_runtime.zip
 
-          New-Item -ItemType Directory -Force -Path Bili23-Downloader\script
+          Expand-Archive windows_x64_runtime.zip -DestinationPath runtime-src
 
-          Copy-Item -Path "src\*" -Destination "Bili23-Downloader\script" -Recurse
+      - name: Build Windows Loader
+        run: |
+          # 源码打包 → 生成清单 → 编译并嵌入，顺序不可换：清单覆盖的是随包的
+          # 其他文件，且不含 exe 自己（它没法算自己的哈希，由代码签名保护），
+          # 所以整个流程只需要编译一次
+          .\scripts\build_release.ps1 -RuntimeDir runtime-src -OutputDir Bili23-Downloader -AppVersion $env:VERSION_NAME
 
-          python -m compileall Bili23-Downloader
+      # 生成卸载程序签名包
+      - name: Prepare uninstaller for signing
+        run: |
+          # setup.iss 里的相对路径（.\Bili23-Downloader、.\LICENSE）是相对它
+          # 自身所在目录解析的，所以要先拷到仓库根再调用
+          Copy-Item -Path "assets\setup.iss" -Destination ".\"
+
+          $uninstallerDir = Join-Path $PWD "uninstaller"
+          "UNINSTALLER_DIR=$uninstallerDir" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
+          $log = & $env:INNO_COMPILER "/DSignedUninstallerDir=$uninstallerDir" ".\setup.iss" 2>&1
+
+          $e32 = @(Get-ChildItem $uninstallerDir -Filter "uninst-*.e32" -ErrorAction SilentlyContinue)
+          if ($e32.Count -ne 1) {
+            $log | ForEach-Object { Write-Host $_ }
+            throw "Failed to generate the unsigned uninstaller"
+          }
+          Write-Host "Uninstaller to sign: $($e32[0].FullName)"
+
+          # 这次 ISCC 按设计以非零码中止，须显式归零，否则 runner 按 $LASTEXITCODE 判为失败
+          exit 0
+
+      # loader 与卸载程序一起签，只走一次签名流程
+      - name: Sign Windows Loader and Uninstaller
+        uses: IvanHanloth/super-simply-sign@0.1.1
+        with:
+          files: |
+            Bili23-Downloader\Bili23.exe
+            uninstaller\uninst-*.e32
+          description: Bili23 Downloader
+          url: https://github.com/ScottSloan/Bili23-Downloader
+          email: ${{ secrets.CERTUM_EMAIL }}
+          otp-seed: ${{ secrets.CERTUM_OTP }}
 
       - name: Package Windows version
         run: |
           # 便携版：直接打包为 zip
           7z a -tzip -mx=9 Bili23-Downloader_${{ env.VERSION_NAME }}_windows_x64_portable.zip Bili23-Downloader\*
 
-          # 安装版：使用 Inno Setup 创建安装程序
-          Copy-Item -Path "assets\setup.iss" -Destination ".\"
-
-          $inno = "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
+          # 安装版：使用 Inno Setup 创建安装程序（setup.iss 已在准备卸载程序时拷到仓库根），
+          # 嵌入上一步签好名的卸载程序
+          $inno = $env:INNO_COMPILER
           $script = ".\setup.iss"
 
-          & $inno "$script"
+          & $inno "/DSignedUninstallerDir=$env:UNINSTALLER_DIR" "$script"
+
+      # 安装程序是用户下载后双击的那个文件，与 loader 是两条独立的信任路径：
+      # 上面那次签名覆盖便携版里的 exe，这次覆盖 setup 本身。
+      # 必须等 ISCC 跑完 —— 签名要在打包之后，反过来安装包里装的就是未签名的 loader
+      - name: Sign Windows Installer
+        uses: IvanHanloth/super-simply-sign@0.1.1
+        with:
+          files: |
+            Bili23-Downloader_${{ env.VERSION_NAME }}_windows_x64.exe
+          description: Bili23 Downloader Setup
+          url: https://github.com/ScottSloan/Bili23-Downloader
+          email: ${{ secrets.CERTUM_EMAIL }}
+          otp-seed: ${{ secrets.CERTUM_OTP }}
 
       - name: Upload Windows artifacts
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: windows-artifacts
           path: |
@@ -136,6 +220,8 @@ jobs:
 
       - name: Clean up files
         run: |
+          # 刚打好的安装程序必须先删掉：Win7 版用的是同一份 setup.iss，
+          # 输出文件名与它完全相同，会把它直接覆盖掉
           Remove-Item -Path Bili23-Downloader -Recurse -Force -ErrorAction SilentlyContinue
           Remove-Item -Path windows_x64_runtime.zip -Force -ErrorAction SilentlyContinue
           Remove-Item -Path Bili23-Downloader_${{ env.VERSION_NAME }}_windows_x64_portable.zip -Recurse -Force -ErrorAction SilentlyContinue
@@ -144,40 +230,64 @@ jobs:
       - name: Prepare Windows 7 runtime
         run: |
           # 下载 Python 静态运行时环境
-          Invoke-WebRequest -Uri "https://github.com/ScottSloan/Python-Static/releases/download/v0.1.0/windows_x64_runtime_for_win7.zip" -OutFile windows_x64_runtime_for_win7.zip
-          
-          Expand-Archive windows_x64_runtime_for_win7.zip -DestinationPath Bili23-Downloader
+          Invoke-WebRequest -Uri "https://github.com/ScottSloan/Python-Static/releases/download/v0.1.9/windows_x64_runtime_for_win7.zip" -OutFile windows_x64_runtime_for_win7.zip
 
-          New-Item -ItemType Directory -Force -Path Bili23-Downloader\script
+          Expand-Archive windows_x64_runtime_for_win7.zip -DestinationPath runtime-src-win7
 
-          Copy-Item -Path "src\*" -Destination "Bili23-Downloader\script" -Recurse
+      - name: Build Windows 7 Loader
+        run: |
+          # 必须重新编译一次，不能复用上面那个 exe：清单覆盖发布目录里的每个
+          # 文件，而 Win7 用的是另一套 runtime，哈希几乎全不同
+          .\scripts\build_release.ps1 -RuntimeDir runtime-src-win7 -OutputDir Bili23-Downloader -AppVersion $env:VERSION_NAME
 
-          python -m compileall Bili23-Downloader
+      - name: Sign Windows 7 Loader
+        uses: IvanHanloth/super-simply-sign@0.1.1
+        with:
+          files: |
+            Bili23-Downloader\Bili23.exe
+          description: Bili23 Downloader (Windows 7)
+          url: https://github.com/ScottSloan/Bili23-Downloader
+          email: ${{ secrets.CERTUM_EMAIL }}
+          otp-seed: ${{ secrets.CERTUM_OTP }}
 
       - name: Package Windows 7 version
         run: |
-          # 使用 Inno Setup 创建安装程序
+          # 使用 Inno Setup 创建安装程序，卸载程序复用正式版那步签好的
 
-          $inno = "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
+          $inno = $env:INNO_COMPILER
           $script = ".\setup.iss"
 
-          & $inno "$script"
+          & $inno "/DSignedUninstallerDir=$env:UNINSTALLER_DIR" "$script"
 
           # 重命名文件
           Rename-Item -Path "Bili23-Downloader_${{ env.VERSION_NAME }}_windows_x64.exe" -NewName "Bili23-Downloader_${{ env.VERSION_NAME }}_windows_x64_for_win7.exe"
 
+      # 与正式版同理：先签内嵌的 loader，打完包再签安装程序自己
+      - name: Sign Windows 7 Installer
+        uses: IvanHanloth/super-simply-sign@0.1.1
+        with:
+          files: |
+            Bili23-Downloader_${{ env.VERSION_NAME }}_windows_x64_for_win7.exe
+          description: Bili23 Downloader Setup (Windows 7)
+          url: https://github.com/ScottSloan/Bili23-Downloader
+          email: ${{ secrets.CERTUM_EMAIL }}
+          otp-seed: ${{ secrets.CERTUM_OTP }}
+
       - name: Upload Windows artifacts
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: windows-artifacts-for-win7
           path: |
             Bili23-Downloader_${{ env.VERSION_NAME }}_windows_x64_for_win7.exe
   
   linux-build:
+    if: needs.get-version.outputs.BUILD_LINUX == 'true'
     needs: get-version
     env:
       VERSION: ${{ needs.get-version.outputs.VERSION }}
       VERSION_NAME: ${{ needs.get-version.outputs.VERSION_NAME }}
+      RPM_RELEASE: ${{ needs.get-version.outputs.RPM_RELEASE }}
+      DEB_VERSION: ${{ needs.get-version.outputs.DEB_VERSION }}
     outputs:
       VERSION: ${{ env.VERSION }}
       VERSION_NAME: ${{ env.VERSION_NAME }}
@@ -187,25 +297,27 @@ jobs:
           - arch: amd64
             os: ubuntu-latest
             python_arch: x64
+            gnu_arch: x86_64
 
           - arch: arm64
             os: ubuntu-24.04-arm
             python_arch: arm64
+            gnu_arch: aarch64
 
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Clean up files
         run: |
           # 清理不需要的资源文件以减小安装包体积
-          rm -rf src\res\icon
-          rm -rf src\res\image
-          rm -rf src\res\i18n\bili23.zh_CN.ts
-          rm -rf src\res\i18n\bili23.zh_TW.ts
+          rm -rf src/res/icon
+          rm -rf src/res/image
+          rm -rf src/res/i18n/bili23.zh_CN.ts
+          rm -rf src/res/i18n/bili23.zh_TW.ts
 
       - name: Setup Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: 3.13
           architecture: ${{ matrix.python_arch }}
@@ -217,7 +329,7 @@ jobs:
       - name: Prepare Linux runtime
         run: |
           # 下载 Python 静态运行时环境
-          wget https://github.com/ScottSloan/Python-Static/releases/download/v0.1.0/linux_${{ matrix.arch }}_runtime.zip
+          wget https://github.com/ScottSloan/Python-Static/releases/download/v0.1.9/linux_${{ matrix.arch }}_runtime.zip
 
           unzip linux_${{ matrix.arch }}_runtime.zip -d Bili23-Downloader
 
@@ -230,6 +342,28 @@ jobs:
 
           python -m compileall Bili23-Downloader
 
+      - name: Install packaging tools
+        run: |
+          sudo apt-get update
+          # rpm: 构建 rpm 包
+          # librsvg2-bin: 把 svg 图标转成 AppImage 用的 png 缩略图
+          # appstream: 校验 AppStream 元数据
+          sudo apt-get install -y rpm librsvg2-bin appstream
+
+      - name: Prepare AppStream metadata
+        run: |
+          # deb、rpm、AppImage 三种包共用同一份元数据，版本与发布日期在此注入
+          mkdir -p metainfo
+
+          # 连引号一起匹配，避免替换到注释等正文中出现的同名字样
+          sed -e "s/version=\"__VERSION__\"/version=\"${{ env.VERSION_NAME }}\"/" \
+              -e "s/date=\"__DATE__\"/date=\"$(date -u +%F)\"/" \
+              assets/com.scottsloan.bili23.metainfo.xml > metainfo/com.scottsloan.bili23.metainfo.xml
+
+          # --no-net：只做本地规范校验，不去请求 screenshot 的远程图片，
+          # 否则构建结果会取决于官网当时是否可达
+          appstreamcli validate --no-net metainfo/com.scottsloan.bili23.metainfo.xml
+
       - name: Package Linux version
         run: |
           # 便携版：直接打包为 tar.gz
@@ -240,17 +374,19 @@ jobs:
           mkdir -p buildroot/usr/local/bin
           mkdir -p buildroot/usr/share/applications
           mkdir -p buildroot/usr/share/icons/hicolor/scalable/apps
+          mkdir -p buildroot/usr/share/metainfo
           mkdir -p buildroot/opt/Bili23-Downloader
 
           cp -r Bili23-Downloader buildroot/opt/
-          cp src/res/icon/app.svg buildroot/usr/share/icons/hicolor/scalable/apps/bili23-downloader.svg
+          cp assets/app.svg buildroot/usr/share/icons/hicolor/scalable/apps/bili23-downloader.svg
+          cp metainfo/com.scottsloan.bili23.metainfo.xml buildroot/usr/share/metainfo/
 
           export GLIBC_VERSION=${{ matrix.arch == 'amd64' && '2.31' || '2.39' }}
 
           # control 文件
           cat << EOF > buildroot/DEBIAN/control
           Package: bili23-downloader
-          Version: ${{ env.VERSION_NAME }}
+          Version: ${{ env.DEB_VERSION }}
           Architecture: ${{ matrix.arch }}
           Section: utils
           Priority: optional
@@ -286,6 +422,7 @@ jobs:
           Categories=Utility;
           Terminal=false
           Comment=A cross-platform video downloader for Bilibili
+          StartupWMClass=bili23-downloader
           EOF
 
           # 入口文件
@@ -301,15 +438,189 @@ jobs:
 
           dpkg-deb --build buildroot Bili23-Downloader_${{ env.VERSION_NAME }}_linux_${{ matrix.arch }}.deb
 
+      - name: Package Linux rpm version
+        run: |
+          RPM_TOP="$PWD/rpmbuild"
+          RPM_ROOT="$RPM_TOP/SOURCES/rpmroot"
+
+          mkdir -p "$RPM_TOP"/{BUILD,BUILDROOT,RPMS,SOURCES,SPECS,SRPMS}
+
+          # 目录结构与 deb 基本一致，区别是入口脚本放在 /usr/bin
+          # （/usr/local 由 filesystem 包管理，rpm 包不应往里写文件）
+          mkdir -p "$RPM_ROOT"/opt
+          mkdir -p "$RPM_ROOT"/usr/bin
+          mkdir -p "$RPM_ROOT"/usr/share/applications
+          mkdir -p "$RPM_ROOT"/usr/share/icons/hicolor/scalable/apps
+          mkdir -p "$RPM_ROOT"/usr/share/metainfo
+
+          cp -r Bili23-Downloader "$RPM_ROOT"/opt/
+
+          cp assets/app.svg "$RPM_ROOT"/usr/share/icons/hicolor/scalable/apps/bili23-downloader.svg
+          cp metainfo/com.scottsloan.bili23.metainfo.xml "$RPM_ROOT"/usr/share/metainfo/
+
+          # desktop 文件
+          cat << 'EOF' > "$RPM_ROOT"/usr/share/applications/bili23-downloader.desktop
+          [Desktop Entry]
+          Type=Application
+          Name=Bili23 Downloader
+          Exec=/usr/bin/bili23-downloader
+          Icon=bili23-downloader
+          Categories=Utility;
+          Terminal=false
+          Comment=A cross-platform video downloader for Bilibili
+          StartupWMClass=bili23-downloader
+          EOF
+
+          # 入口文件
+          cat << 'EOF' > "$RPM_ROOT"/usr/bin/bili23-downloader
+          #!/bin/bash
+          cd /opt/Bili23-Downloader
+          exec ./bili23-downloader "$@"
+          EOF
+
+          chmod +x "$RPM_ROOT"/usr/bin/bili23-downloader
+
+          # spec 文件
+          cat << 'EOF' > "$RPM_TOP"/SPECS/bili23-downloader.spec
+          # 打包的是预编译产物，rpm 的几项默认后处理必须全部关掉：
+          # debug_package         —— 没有源码和符号，生成 debuginfo 子包会直接构建失败
+          # __os_install_post     —— 其中的 brp-strip 会 strip 静态链接的 loader 与 ffmpeg
+          # __brp_python_bytecompile —— 会用系统 Python 重新编译 script/ 下的代码，版本不符即失败
+          %global debug_package %{nil}
+          %global __os_install_post %{nil}
+          %global __brp_python_bytecompile %{nil}
+
+          Name:           bili23-downloader
+          Version:        ${{ env.VERSION }}
+          Release:        ${{ env.RPM_RELEASE }}
+          Summary:        A cross-platform video downloader for Bilibili
+          License:        GPL-3.0-or-later
+          URL:            https://bili23.scott-sloan.cn
+
+          # 运行时自带全部依赖。若开启自动扫描，捆绑的 Qt 库会被登记成系统级 Provides，
+          # 同时生成大量无法满足的 Requires；且 libxcb-cursor 在各发行版中包名不一致，
+          # 写死任何一个都会导致另一些发行版装不上，因此不声明 Requires
+          AutoReqProv:    no
+
+          %description
+          Bili23 Downloader is a cross-platform video downloader for Bilibili.
+
+          %install
+          mkdir -p %{buildroot}
+          cp -a %{_sourcedir}/rpmroot/. %{buildroot}/
+          # 打进包里的权限会随构建机的 umask 变化（可能是 775/664），
+          # 用 _fixperms 归一为目录 755、文件 644，同时保留已有的可执行位
+          %{_fixperms} %{buildroot}
+
+          %files
+          %defattr(-,root,root,-)
+          /opt/Bili23-Downloader
+          /usr/bin/bili23-downloader
+          /usr/share/applications/bili23-downloader.desktop
+          /usr/share/icons/hicolor/scalable/apps/bili23-downloader.svg
+          /usr/share/metainfo/com.scottsloan.bili23.metainfo.xml
+
+          %postun
+          # 参数为 0 表示卸载，为 1 表示升级。rpm 升级的顺序是
+          # 「安装新版本文件 → 执行旧版本的卸载脚本」，无条件删除会把刚装好的新版本一并删掉
+          # 注意：spec 的注释行中不要出现百分号，rpm 会在注释里照样做宏展开
+          if [ $1 -eq 0 ]; then
+              rm -rf /opt/Bili23-Downloader
+          fi
+          EOF
+
+          rpmbuild -bb \
+            --target ${{ matrix.gnu_arch }} \
+            --define "_topdir $RPM_TOP" \
+            "$RPM_TOP"/SPECS/bili23-downloader.spec
+
+          mv "$RPM_TOP"/RPMS/${{ matrix.gnu_arch }}/*.rpm \
+            Bili23-Downloader_${{ env.VERSION_NAME }}_linux_${{ matrix.gnu_arch }}.rpm
+
+          # 输出包信息便于在构建日志中核对
+          rpm -qip Bili23-Downloader_${{ env.VERSION_NAME }}_linux_${{ matrix.gnu_arch }}.rpm
+          rpm -qp --requires Bili23-Downloader_${{ env.VERSION_NAME }}_linux_${{ matrix.gnu_arch }}.rpm
+
+      - name: Package Linux AppImage version
+        run: |
+          APPDIR="$PWD/Bili23-Downloader.AppDir"
+
+          mkdir -p "$APPDIR"/usr/lib
+          mkdir -p "$APPDIR"/usr/share/applications
+          mkdir -p "$APPDIR"/usr/share/icons/hicolor/scalable/apps
+          mkdir -p "$APPDIR"/usr/share/metainfo
+
+          cp -r Bili23-Downloader "$APPDIR"/usr/lib/
+
+          # desktop 文件：Exec 必须是不带路径的命令名、Icon 不带扩展名，
+          # 否则 appimagetool 的 desktop-file-validate 会拒绝
+          cat << 'EOF' > "$APPDIR"/bili23-downloader.desktop
+          [Desktop Entry]
+          Type=Application
+          Name=Bili23 Downloader
+          Exec=bili23-downloader
+          Icon=bili23-downloader
+          Categories=Utility;
+          Terminal=false
+          Comment=A cross-platform video downloader for Bilibili
+          StartupWMClass=bili23-downloader
+          EOF
+
+          cp "$APPDIR"/bili23-downloader.desktop "$APPDIR"/usr/share/applications/
+          cp metainfo/com.scottsloan.bili23.metainfo.xml "$APPDIR"/usr/share/metainfo/
+
+          # 图标：AppDir 根目录一份供 appimagetool 使用，标准路径一份供桌面集成使用
+          cp assets/app.svg "$APPDIR"/bili23-downloader.svg
+          cp assets/app.svg "$APPDIR"/usr/share/icons/hicolor/scalable/apps/bili23-downloader.svg
+
+          # .DirIcon 用 png，文件管理器普遍不渲染 svg 缩略图
+          rsvg-convert -w 256 -h 256 assets/app.svg -o "$APPDIR"/.DirIcon
+
+          # AppRun：AppImage 每次运行的挂载点都不同（/tmp/.mount_XXXXXX），
+          # loader 依赖 PYSTAND_HOME 与工作目录定位 bundle/ffmpeg，必须在启动时动态解析
+          cat << 'EOF' > "$APPDIR"/AppRun
+          #!/bin/bash
+          HERE="$(dirname "$(readlink -f "${0}")")"
+          export PYSTAND_HOME="$HERE/usr/lib/Bili23-Downloader"
+          cd "$PYSTAND_HOME"
+          exec ./bili23-downloader "$@"
+          EOF
+
+          chmod +x "$APPDIR"/AppRun
+
+          wget -q https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-${{ matrix.gnu_arch }}.AppImage
+
+          # runtime 单独取 type2-runtime 的构建，它是静态链接且支持 fuse3。
+          # appimagetool 自带的旧 runtime 依赖 libfuse2，而 Ubuntu 22.04+ 与 Debian 12+
+          # 默认只装 fuse3，用户会直接遇到 dlopen libfuse.so.2 失败
+          wget -q https://github.com/AppImage/type2-runtime/releases/download/continuous/runtime-${{ matrix.gnu_arch }}
+
+          chmod +x appimagetool-${{ matrix.gnu_arch }}.AppImage
+
+          # appimagetool 自身也是 AppImage，runner 上同样没有 libfuse2，需要解包后运行
+          export APPIMAGE_EXTRACT_AND_RUN=1
+          export ARCH=${{ matrix.gnu_arch }}
+
+          # --no-appstream：元数据已在前面用 appstreamcli --no-net 校验过。
+          # appimagetool 自己那次校验会联网拉取 screenshot，构建成败将取决于官网可达性
+          ./appimagetool-${{ matrix.gnu_arch }}.AppImage \
+            --no-appstream \
+            --runtime-file runtime-${{ matrix.gnu_arch }} \
+            "$APPDIR" \
+            Bili23-Downloader_${{ env.VERSION_NAME }}_linux_${{ matrix.gnu_arch }}.AppImage
+
       - name: Upload Linux artifacts
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: linux-${{ matrix.arch }}-artifacts
           path: |
             Bili23-Downloader_${{ env.VERSION_NAME }}_linux_${{ matrix.arch }}_portable.tar.gz
             Bili23-Downloader_${{ env.VERSION_NAME }}_linux_${{ matrix.arch }}.deb
+            Bili23-Downloader_${{ env.VERSION_NAME }}_linux_${{ matrix.gnu_arch }}.rpm
+            Bili23-Downloader_${{ env.VERSION_NAME }}_linux_${{ matrix.gnu_arch }}.AppImage
 
   macos-build:
+    if: needs.get-version.outputs.BUILD_MACOS == 'true'
     needs: get-version
     env:
       VERSION: ${{ needs.get-version.outputs.VERSION }}
@@ -330,18 +641,18 @@ jobs:
 
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Clean up files
         run: |
           # 清理不需要的资源文件以减小安装包体积
-          rm -rf src\res\icon
-          rm -rf src\res\image
-          rm -rf src\res\i18n\bili23.zh_CN.ts
-          rm -rf src\res\i18n\bili23.zh_TW.ts
+          rm -rf src/res/icon
+          rm -rf src/res/image
+          rm -rf src/res/i18n/bili23.zh_CN.ts
+          rm -rf src/res/i18n/bili23.zh_TW.ts
 
       - name: Setup Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: 3.13
           architecture: ${{ matrix.python_arch }}
@@ -354,7 +665,7 @@ jobs:
       - name: Prepare macOS runtime
         run: |
           # 下载 Python 静态运行时环境
-          wget https://github.com/ScottSloan/Python-Static/releases/download/v0.1.0/macos_${{ matrix.arch }}_runtime.zip
+          wget https://github.com/ScottSloan/Python-Static/releases/download/v0.1.9/macos_${{ matrix.arch }}_runtime.zip
 
           unzip macos_${{ matrix.arch }}_runtime.zip -d Bili23-Downloader
 
@@ -392,7 +703,7 @@ jobs:
             <key>CFBundleVersion</key>
             <string>${{ env.VERSION }}</string>
             <key>CFBundleShortVersionString</key>
-            <string>${{ env.VERSION_NAME }}</string>
+            <string>${{ env.VERSION }}</string>
             <key>CFBundlePackageType</key>
             <string>APPL</string>
             <key>LSMinimumSystemVersion</key>
@@ -429,24 +740,24 @@ jobs:
             "dmg_build/Bili23-Downloader.app/"
 
       - name: Upload macOS artifact
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: macos-${{ matrix.arch }}-artifact
           path: Bili23-Downloader_${{ env.VERSION_NAME }}_macos_${{ matrix.arch }}.dmg
   
   publish:
     if: github.event_name != 'workflow_dispatch'
-    needs: [windows-build, linux-build, macos-build]
+    needs: [get-version, windows-build, linux-build, macos-build]
     env:
-      VERSION_NAME: ${{ needs.windows-build.outputs.VERSION_NAME }}
-      IS_PRERELEASE: ${{ needs.windows-build.outputs.IS_PRERELEASE }}
+      VERSION_NAME: ${{ needs.get-version.outputs.VERSION_NAME }}
+      IS_PRERELEASE: ${{ needs.get-version.outputs.IS_PRERELEASE }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
       discussions: write
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Download all artifacts
         uses: actions/download-artifact@v8
@@ -469,7 +780,7 @@ jobs:
           echo "" >> CHANGELOG.md
 
           echo "> [!TIP]" >> CHANGELOG.md
-          echo "> Windows 7 用户请下载 win7 专用版（带有 for_win7 字样）" >> CHANGELOG.md
+          echo "> Windows 7 以及低于 Windows 10 1809 的用户，请下载 Win 7 兼容版（带有 for_win7 字样）" >> CHANGELOG.md
           echo "> 其他问题请参考 [常见问题(FAQ)](https://bili23.scott-sloan.cn/doc/faq.html)" >> CHANGELOG.md
 
       - name: Upload to Release
@@ -478,6 +789,8 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           name: v${{ env.VERSION_NAME }}
+          tag_name: v${{ env.VERSION_NAME }}
+          target_commitish: ${{ github.sha }}
           body_path: CHANGELOG.md
           make_latest: ${{ env.IS_PRERELEASE != 'true' }}
           draft: false
