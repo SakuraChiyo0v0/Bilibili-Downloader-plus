@@ -34,6 +34,7 @@ jobs:
       IS_PRERELEASE: ${{ steps.set-version.outputs.IS_PRERELEASE }}
       RPM_RELEASE: ${{ steps.set-version.outputs.RPM_RELEASE }}
       DEB_VERSION: ${{ steps.set-version.outputs.DEB_VERSION }}
+      SHOULD_BUILD: ${{ steps.release-state.outputs.SHOULD_BUILD }}
       BUILD_WINDOWS: ${{ steps.set-targets.outputs.BUILD_WINDOWS }}
       BUILD_LINUX: ${{ steps.set-targets.outputs.BUILD_LINUX }}
       BUILD_MACOS: ${{ steps.set-targets.outputs.BUILD_MACOS }}
@@ -68,8 +69,16 @@ jobs:
             echo "BUILD_MACOS=$DEFAULT_BUILD_MACOS" >> $GITHUB_OUTPUT
           fi
 
+      - name: Protect published release assets
+        id: release-state
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: v${{ steps.set-version.outputs.VERSION_NAME }}
+        run: |
+          python scripts/release_guard.py "$RELEASE_TAG" --github-output "$GITHUB_OUTPUT"
+
   windows-build:
-    if: needs.get-version.outputs.BUILD_WINDOWS == 'true'
+    if: needs.get-version.outputs.BUILD_WINDOWS == 'true' && needs.get-version.outputs.SHOULD_BUILD == 'true'
     needs: get-version
     environment: signing
     env:
@@ -303,7 +312,7 @@ jobs:
             Bili23-Downloader_${{ env.VERSION_NAME }}_windows_x64_for_win7.exe
   
   linux-build:
-    if: needs.get-version.outputs.BUILD_LINUX == 'true'
+    if: needs.get-version.outputs.BUILD_LINUX == 'true' && needs.get-version.outputs.SHOULD_BUILD == 'true'
     needs: get-version
     env:
       VERSION: ${{ needs.get-version.outputs.VERSION }}
@@ -642,7 +651,7 @@ jobs:
             Bili23-Downloader_${{ env.VERSION_NAME }}_linux_${{ matrix.gnu_arch }}.AppImage
 
   macos-build:
-    if: needs.get-version.outputs.BUILD_MACOS == 'true'
+    if: needs.get-version.outputs.BUILD_MACOS == 'true' && needs.get-version.outputs.SHOULD_BUILD == 'true'
     needs: get-version
     env:
       VERSION: ${{ needs.get-version.outputs.VERSION }}

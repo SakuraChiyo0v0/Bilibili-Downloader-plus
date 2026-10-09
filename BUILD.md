@@ -70,3 +70,5 @@ $env:PATH = "$(Join-Path $PWD '.venv/Scripts');$env:PATH"
 用户明确授权发布后，将对应源码与变更记录提交到本仓库，再从 Actions 手动触发 `Publish release`，填写与源码一致的标签并选择平台。完整 Windows／Linux／macOS 矩阵成功后，工作流会校验 13 个发行产物、生成 `SHA256SUMS.txt`，并创建草稿 Release。只选择部分平台时保留构建 artifacts，不生成完整发行。
 
 核对草稿中的版本、产物、校验和与必要冒烟结果后，才将草稿发布为最新版。Windows 未签名状态、macOS 签名／公证状态、实际验证范围和升级限制必须如实写入发行说明。已有公开发行不得用未经核验的新文件覆盖。
+
+发布标签可能再次触发 `push` 工作流。`scripts/release_guard.py` 会检查同名发行：已公开则跳过全部构建，草稿或尚不存在才允许继续；查询失败会停止流程，避免因网络或权限错误覆盖正式文件。
