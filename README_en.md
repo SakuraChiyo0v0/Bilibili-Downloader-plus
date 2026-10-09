@@ -12,9 +12,21 @@
 
 This project is a fork of **[ScottSloan / Bili23-Downloader](https://github.com/ScottSloan/Bili23-Downloader)**. Video parsing, the download engine, the desktop interface, and most core features come from Scott Sloan and the upstream contributors. Thank you for maintaining this open-source tool.
 
-Plus **extends upstream**. We follow upstream releases and design decisions, prefer upstream implementations when changes overlap, and adapt our additions to the existing download workflow. This README focuses on those additions. For login, quality selection, subtitles, naming rules, and other core features, see the [upstream documentation](https://bili23.scott-sloan.cn/).
+Plus is an **independently maintained fork for specific workflows**. It grows from the maintainer’s personal needs for media organization, continuous sync, and remote storage. These needs may not suit a general-purpose downloader and do not represent upstream’s direction.
+
+We continue to follow upstream releases and core design decisions, prefer upstream implementations when changes overlap, and adapt our additions accordingly. **Changes from this repository are reviewed, merged, and released here; we do not open pull requests against upstream.** Upstream attribution and synchronization remain part of this independent maintenance model.
+
+For login, quality selection, subtitles, naming rules, and other core features, see the [upstream documentation](https://bili23.scott-sloan.cn/). This README focuses on the Plus additions and how to use them.
 
 The current source is based on upstream **2.20.0**, identified as **`2.20.0+plus.1`**. This document describes the source branch; check each Release for features included in published packages.
+
+## Maintenance priorities
+
+- **Stability first:** protect existing download and data-handling behavior, with attention to recovery and regression tests for critical paths.
+- **Complete workflows:** address a concrete need through configuration, execution, status reporting, and retries, so an added feature is usable end to end.
+- **Efficiency as a constraint:** consider runtime performance, resource use, and maintenance cost. Feature count is not a growth target.
+
+Specialized workflows may require additional options and more complex processing. We accept complexity that serves a clear purpose and aim to contain it within explicitly enabled enhancements. Users who only need general downloading capabilities can choose upstream directly.
 
 ## What Plus adds
 
@@ -79,11 +91,11 @@ Local disk space is still required for downloading and processing. Upload failur
 
 ## Feedback and contributions
 
-Please report Plus issues in [this repository’s Issues](https://github.com/SakuraChiyo0v0/Bilibili-Downloader-plus/issues). For a shared upstream issue, first check whether it reproduces in the corresponding upstream version before submitting a minimal report upstream.
+Please report Plus issues and feature requests in [this repository’s Issues](https://github.com/SakuraChiyo0v0/Bilibili-Downloader-plus/issues); they are handled independently here. If you also tested the corresponding upstream version, include that comparison to help identify the source of the issue.
 
 Include the full version, operating system, relevant settings, reproduction steps, expected and actual behavior, and useful log excerpts or screenshots. Source users should include the commit. Remove cookies, tokens, passwords, and private server addresses before posting.
 
-Fixes, tests, and documentation improvements are welcome. Explain how an enhancement relates to upstream behavior and reuse upstream workflows where possible. See [BUILD.md](BUILD.md) for development, testing, and packaging instructions.
+Fixes, tests, and documentation contributions to this repository are welcome. Describe the specific workflow, its relationship to upstream behavior, and the implications for stability and resource use. Reuse existing workflows where possible. Plus-specific needs evolve here without asking upstream to take on their complexity or maintenance cost. See [BUILD.md](BUILD.md) for development, testing, and packaging instructions.
 
 ## License and attribution
 
